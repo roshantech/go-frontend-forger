@@ -1,3 +1,0 @@
-module.exports=[3605,a=>{"use strict";var b=a.i(7997);a.s(["default",0,function({children:a}){return(0,b.jsx)("div",{className:"min-h-screen bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.16),_transparent_28%),linear-gradient(180deg,#f8fbff_0%,#eef4ff_100%)] px-4 py-4 sm:px-6 sm:py-6 lg:px-8",children:(0,b.jsx)("div",{className:"mx-auto max-w-[1700px]",children:a})})}])},70809,a=>{a.n(a.i(3605))}];
-
-//# sourceMappingURL=app_%28dashboard%29_layout_tsx_0sylzv-._.js.map
