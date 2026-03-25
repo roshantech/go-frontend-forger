@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[44393,["/_next/static/chunks/0-gtgmxppp1-~.js","/_next/static/chunks/0~moq~a3n~ppu.js","/_next/static/chunks/0d3shmwh5_nmn.js","/_next/static/chunks/0mo0rjgsg3tmu.js"],"default"]
+3:I[97367,["/_next/static/chunks/0-gtgmxppp1-~.js","/_next/static/chunks/0~moq~a3n~ppu.js","/_next/static/chunks/0d3shmwh5_nmn.js"],"OutletBoundary"]
+4:"$Sreact.suspense"
+0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"space-y-8","children":[["$","div",null,{"className":"space-y-3","children":[["$","span",null,{"className":"inline-flex rounded-full bg-sky-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700","children":"Sign up"}],["$","h2",null,{"className":"text-3xl font-semibold text-slate-950","children":"Create a local workspace in under a minute."}],["$","p",null,{"className":"text-sm leading-6 text-slate-500","children":"We will seed a starter flow for your account so the editor opens with a useful blueprint instead of an empty grid."}]]}],["$","$L2",null,{}]]}],[["$","script","script-0",{"src":"/_next/static/chunks/0mo0rjgsg3tmu.js","async":true}]],["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"UY1_I-mOYv6RBsKG70c5T"}
+5:null

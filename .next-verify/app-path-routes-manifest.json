@@ -1,0 +1,10 @@
+{
+  "/(auth)/auth/login/page": "/auth/login",
+  "/(auth)/auth/signup/page": "/auth/signup",
+  "/(dashboard)/dashboard/page": "/dashboard",
+  "/(dashboard)/dashboard/workflow/page": "/dashboard/workflow",
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/favicon.ico/route": "/favicon.ico",
+  "/page": "/"
+}

@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/rosha/OneDrive/Documents/PersonalProjects/go-frontend-forger/app/%28dashboard%29/layout.tsx"],"sourcesContent":["export default function DashboardGroupLayout({\n  children,\n}: {\n  children: React.ReactNode;\n}) {\n  return (\n    <div className=\"min-h-screen bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.16),_transparent_28%),linear-gradient(180deg,#f8fbff_0%,#eef4ff_100%)] px-4 py-4 sm:px-6 sm:py-6 lg:px-8\">\n      <div className=\"mx-auto max-w-[1700px]\">{children}</div>\n    </div>\n  );\n}\n"],"names":["DashboardGroupLayout","children","className"],"mappings":";;;;;;AAAe,SAASA,qBAAqB,EAC3CC,QAAQ,EAGT;IACC,qBACE,8OAAC;QAAIC,WAAU;kBACb,cAAA,8OAAC;YAAIA,WAAU;sBAA0BD;;;;;;;;;;;AAG/C"}}]
+}
