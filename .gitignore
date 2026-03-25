@@ -1,0 +1,29 @@
+# Environment — never commit secrets
+.env
+
+# Go build artifacts
+bin/
+*.exe
+*.test
+*.out
+
+# Go test cache
+/tmp/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude memory
+.claude/
