@@ -9,19 +9,19 @@ import toast from 'react-hot-toast'
 const STARTER_NODES = [
   {
     id: 'n1', type: 'workflow', position: { x: 80, y: 160 },
-    data: { kind: 'trigger' as const, label: 'Webhook received', subtitle: 'POST /hook', description: '', accent: '#f59e0b', status: 'live' as const, notes: '', config: {} },
+    data: { kind: 'trigger' as const, label: 'Webhook received', subtitle: 'POST /hook', description: '', accent: '#f59e0b', status: 'live' as const, notes: '', config: {} as Record<string, string> },
   },
   {
     id: 'n2', type: 'workflow', position: { x: 340, y: 160 },
-    data: { kind: 'processor' as const, label: 'Parse payload', subtitle: 'Extract fields', description: '', accent: '#34d399', status: 'ready' as const, notes: '', config: { field: 'body.data' } },
+    data: { kind: 'processor' as const, label: 'Parse payload', subtitle: 'Extract fields', description: '', accent: '#34d399', status: 'ready' as const, notes: '', config: { field: 'body.data' } as Record<string, string> },
   },
   {
     id: 'n3', type: 'workflow', position: { x: 600, y: 80 },
-    data: { kind: 'condition' as const, label: 'Has errors?', subtitle: '', description: '', accent: '#fb7185', status: 'ready' as const, notes: '', config: {} },
+    data: { kind: 'condition' as const, label: 'Has errors?', subtitle: '', description: '', accent: '#fb7185', status: 'ready' as const, notes: '', config: {} as Record<string, string> },
   },
   {
     id: 'n4', type: 'workflow', position: { x: 600, y: 260 },
-    data: { kind: 'action' as const, label: 'Notify Slack', subtitle: '#alerts channel', description: '', accent: '#818cf8', status: 'draft' as const, notes: '', config: { channel: '#alerts' } },
+    data: { kind: 'action' as const, label: 'Notify Slack', subtitle: '#alerts channel', description: '', accent: '#818cf8', status: 'draft' as const, notes: '', config: { channel: '#alerts' } as Record<string, string> },
   },
 ]
 

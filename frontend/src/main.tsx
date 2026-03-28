@@ -12,7 +12,7 @@ import RegisterPage from './pages/RegisterPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import ProjectPage from './pages/ProjectPage'
-import ASTInspectorPage from './pages/ASTInspectorPage'
+import ASTPage from './pages/ASTPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,7 +36,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route element={<AppLayout />}>
             <Route path="/" element={<Navigate to="/project" replace />} />
             <Route path="/project" element={<ProjectPage />} />
-            <Route path="/inspect" element={<ASTInspectorPage />} />
+            <Route path="/ast" element={<ASTPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

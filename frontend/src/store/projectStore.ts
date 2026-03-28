@@ -39,7 +39,7 @@ interface ProjectStore {
   reset: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void
 }
 
-export const useProjectStore = create<ProjectStore>((set, get) => ({
+export const useProjectStore = create<ProjectStore>((set) => ({
   nodes: [],
   edges: [],
   selectedNodeId: null,
