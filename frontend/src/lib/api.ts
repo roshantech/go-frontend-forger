@@ -136,4 +136,31 @@ export const astApi = {
 
   inspectRaw: (fileName: string, content: string) =>
     api.post<FileInspection>('/ast/inspect-raw', { fileName, content }),
+
+  treeFile: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post<TreeNode>('/ast/tree', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  treeRaw: (fileName: string, content: string) =>
+    api.post<TreeNode>('/ast/tree-raw', { fileName, content }),
+}
+
+// ─── AST Tree ────────────────────────────────────────────────────────────────
+
+export interface TreeNode {
+  id: string
+  type: string
+  category: string
+  name?: string
+  value?: string
+  line?: number
+  col?: number
+  endLine?: number
+  endCol?: number
+  props?: Record<string, string>
+  children?: TreeNode[]
 }

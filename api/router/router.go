@@ -39,6 +39,8 @@ func Setup(deps *Deps) *fiber.App {
 	astGroup := api.Group("/ast")
 	astGroup.Post("/inspect", deps.ASTHandler.Inspect)
 	astGroup.Post("/inspect-raw", deps.ASTHandler.InspectRaw)
+	astGroup.Post("/tree", deps.ASTHandler.Tree)
+	astGroup.Post("/tree-raw", deps.ASTHandler.TreeRaw)
 
 	// Protected routes
 	protected := api.Group("", middleware.JWTMiddleware(deps.JWTSecret))

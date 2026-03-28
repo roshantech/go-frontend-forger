@@ -2,7 +2,7 @@ import { Navigate, Outlet, Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { authApi } from '@/lib/api'
 import { isAuthenticated, clearToken } from '@/lib/auth'
-import { LayoutDashboard, Search, LogOut } from 'lucide-react'
+import { LayoutDashboard, GitBranch, LogOut } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function AppLayout() {
@@ -25,7 +25,7 @@ export default function AppLayout() {
 
   const navItems = [
     { to: '/project', icon: <LayoutDashboard size={18} />, label: 'Workflow' },
-    { to: '/inspect',  icon: <Search size={18} />,          label: 'AST Inspector' },
+    { to: '/ast',     icon: <GitBranch size={18} />,       label: 'AST Visualizer' },
   ]
 
   return (
@@ -67,7 +67,6 @@ export default function AppLayout() {
         )}
       </aside>
 
-      {/* Main content */}
       <main className="flex-1 overflow-hidden">
         <Outlet />
       </main>
