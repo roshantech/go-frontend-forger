@@ -149,6 +149,56 @@ export const astApi = {
     api.post<TreeNode>('/ast/tree-raw', { fileName, content }),
 }
 
+// ─── Projects ────────────────────────────────────────────────────────────────
+
+export interface Project {
+  id: string
+  userId: string
+  name: string
+  description: string
+  language: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProjectFile {
+  id: string
+  projectId: string
+  path: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProjectWithFiles extends Project {
+  files: ProjectFile[]
+}
+
+export const projectApi = {
+  create: (name: string, description: string, language: string) =>
+    api.post<Project>('/projects', { name, description, language }),
+
+  list: () =>
+    api.get<{ projects: Project[] }>('/projects'),
+
+  get: (id: string) =>
+    api.get<ProjectWithFiles>(`/projects/${id}`),
+
+  delete: (id: string) =>
+    api.delete(`/projects/${id}`),
+
+  uploadFiles: (projectId: string, files: File[]) => {
+    const form = new FormData()
+    files.forEach(f => form.append('files', f))
+    return api.post<{ uploaded: ProjectFile[] }>(`/projects/${projectId}/files`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  getFile: (projectId: string, path: string) =>
+    api.get<ProjectFile>(`/projects/${projectId}/files/${path}`),
+}
+
 // ─── AST Tree ────────────────────────────────────────────────────────────────
 
 export interface TreeNode {

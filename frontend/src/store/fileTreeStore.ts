@@ -1,52 +1,122 @@
 import { create } from 'zustand'
+import type { ProjectWithFiles, ProjectFile } from '@/lib/api'
 
 export interface FTreeItem {
   id: string
   name: string
   type: 'root' | 'folder' | 'file'
   language?: string
+  path?: string          // full path for files (used for AST navigation)
+  content?: string       // file content if loaded
   parentId?: string
   children?: string[]
 }
 
-// Mock Go project — replace with real API data
-const ITEMS: FTreeItem[] = [
-  { id: 'root',       name: 'forge-api',     type: 'root',   children: ['cmd', 'internal', 'api', 'db', 'go.mod', 'readme'] },
-  { id: 'cmd',        name: 'cmd',           type: 'folder', parentId: 'root',     children: ['main.go'] },
-  { id: 'main.go',    name: 'main.go',       type: 'file',   parentId: 'cmd',      language: 'go' },
-  { id: 'internal',   name: 'internal',      type: 'folder', parentId: 'root',     children: ['auth', 'ast'] },
-  { id: 'auth',       name: 'auth',          type: 'folder', parentId: 'internal', children: ['handler.go', 'jwt.go'] },
-  { id: 'handler.go', name: 'handler.go',    type: 'file',   parentId: 'auth',     language: 'go' },
-  { id: 'jwt.go',     name: 'jwt.go',        type: 'file',   parentId: 'auth',     language: 'go' },
-  { id: 'ast',        name: 'ast',           type: 'folder', parentId: 'internal', children: ['parser.go', 'tree.go'] },
-  { id: 'parser.go',  name: 'parser.go',     type: 'file',   parentId: 'ast',      language: 'go' },
-  { id: 'tree.go',    name: 'tree.go',       type: 'file',   parentId: 'ast',      language: 'go' },
-  { id: 'api',        name: 'api',           type: 'folder', parentId: 'root',     children: ['handlers', 'router'] },
-  { id: 'handlers',   name: 'handlers',      type: 'folder', parentId: 'api',      children: ['ast_handler.go'] },
-  { id: 'ast_handler.go', name: 'ast.go',    type: 'file',   parentId: 'handlers', language: 'go' },
-  { id: 'router',     name: 'router',        type: 'folder', parentId: 'api',      children: ['router.go'] },
-  { id: 'router.go',  name: 'router.go',     type: 'file',   parentId: 'router',   language: 'go' },
-  { id: 'db',         name: 'db',            type: 'folder', parentId: 'root',     children: ['migrate.sql'] },
-  { id: 'migrate.sql',name: 'migrate.sql',   type: 'file',   parentId: 'db',       language: 'sql' },
-  { id: 'go.mod',     name: 'go.mod',        type: 'file',   parentId: 'root',     language: 'toml' },
-  { id: 'readme',     name: 'README.md',     type: 'file',   parentId: 'root',     language: 'markdown' },
-]
+// ─── Build a flat item map from a ProjectWithFiles ────────────
+export function buildItemMap(project: ProjectWithFiles): Record<string, FTreeItem> {
+  const items: Record<string, FTreeItem> = {}
 
-const ITEM_MAP: Record<string, FTreeItem> = {}
-for (const item of ITEMS) ITEM_MAP[item.id] = item
+  // Root node
+  items['root'] = {
+    id: 'root',
+    name: project.name,
+    type: 'root',
+    language: project.language,
+    children: [],
+  }
+
+  // Build folder/file structure from flat file paths
+  for (const pf of project.files) {
+    addFileToTree(items, pf)
+  }
+
+  return items
+}
+
+function getExt(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+  const map: Record<string, string> = {
+    go: 'go', ts: 'typescript', tsx: 'typescript',
+    js: 'javascript', jsx: 'javascript', py: 'python',
+    sql: 'sql', yaml: 'yaml', yml: 'yaml',
+    json: 'json', md: 'markdown', sh: 'shell',
+    toml: 'toml',
+  }
+  return map[ext] ?? 'plaintext'
+}
+
+function addFileToTree(items: Record<string, FTreeItem>, pf: ProjectFile) {
+  const parts = pf.path.replace(/^\//, '').split('/')
+  let parentId = 'root'
+
+  // Ensure all intermediate folders exist
+  for (let i = 0; i < parts.length - 1; i++) {
+    const folderName = parts[i]
+    const folderId   = parts.slice(0, i + 1).join('/')
+
+    if (!items[folderId]) {
+      items[folderId] = {
+        id: folderId,
+        name: folderName,
+        type: 'folder',
+        parentId,
+        children: [],
+      }
+      const parent = items[parentId]
+      if (parent.children && !parent.children.includes(folderId)) {
+        parent.children.push(folderId)
+      }
+    }
+    parentId = folderId
+  }
+
+  // File node
+  const fileName = parts[parts.length - 1]
+  const fileId   = pf.path.replace(/^\//, '')
+
+  items[fileId] = {
+    id: fileId,
+    name: fileName,
+    type: 'file',
+    language: getExt(fileName),
+    path: pf.path,
+    content: pf.content,
+    parentId,
+  }
+
+  const parent = items[parentId]
+  if (parent.children && !parent.children.includes(fileId)) {
+    parent.children.push(fileId)
+  }
+}
+
+// ─── Store ────────────────────────────────────────────────────
 
 interface FileTreeStore {
   items: Record<string, FTreeItem>
   expandedIds: Set<string>
   selectedFileId: string | null
+  projectId: string | null
+
+  setProject: (project: ProjectWithFiles) => void
   toggleFolder: (id: string) => void
   selectFile: (id: string | null) => void
+  clear: () => void
 }
 
 export const useFileTreeStore = create<FileTreeStore>((set) => ({
-  items: ITEM_MAP,
+  items: getDefaultItems(),
   expandedIds: new Set(['root']),
   selectedFileId: null,
+  projectId: null,
+
+  setProject: (project) =>
+    set({
+      items: buildItemMap(project),
+      expandedIds: new Set(['root']),
+      selectedFileId: null,
+      projectId: project.id,
+    }),
 
   toggleFolder: (id) =>
     set((s) => {
@@ -57,7 +127,28 @@ export const useFileTreeStore = create<FileTreeStore>((set) => ({
     }),
 
   selectFile: (id) => set({ selectedFileId: id }),
+
+  clear: () =>
+    set({
+      items: getDefaultItems(),
+      expandedIds: new Set(['root']),
+      selectedFileId: null,
+      projectId: null,
+    }),
 }))
+
+/** Default placeholder shown before any project is loaded */
+function getDefaultItems(): Record<string, FTreeItem> {
+  return {
+    root: {
+      id: 'root',
+      name: 'No project loaded',
+      type: 'root',
+      language: 'go',
+      children: [],
+    },
+  }
+}
 
 /** Returns which node ids are visible given current expanded set */
 export function getVisibleIds(
@@ -66,6 +157,7 @@ export function getVisibleIds(
 ): string[] {
   const visible: string[] = []
   function walk(id: string) {
+    if (!items[id]) return
     visible.push(id)
     const item = items[id]
     if ((item.type === 'root' || item.type === 'folder') && expandedIds.has(id)) {

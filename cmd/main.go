@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"forge/api/handlers"
 	"forge/api/router"
@@ -12,9 +14,7 @@ import (
 	"forge/internal/config"
 	"forge/internal/db"
 	"forge/internal/logger"
-
-	"context"
-	"time"
+	"forge/internal/project"
 
 	"go.uber.org/zap"
 )
@@ -42,15 +42,21 @@ func main() {
 	}
 	defer database.Close()
 
-	userRepo := auth.NewPostgresUserRepository(database)
-	authHandler := handlers.NewAuthHandler(userRepo, cfg.JWTSecret, log)
-	astHandler := handlers.NewASTHandler(log)
+	userRepo    := auth.NewPostgresUserRepository(database)
+	projectRepo := project.NewRepository(database)
+
+	authHandler    := handlers.NewAuthHandler(userRepo, cfg.JWTSecret, log)
+	astHandler     := handlers.NewASTHandler(log)
+	projectHandler := handlers.NewProjectHandler(projectRepo, log)
+	uploadHandler  := handlers.NewUploadHandler(projectRepo, log)
 
 	app := router.Setup(&router.Deps{
-		AuthHandler: authHandler,
-		ASTHandler:  astHandler,
-		JWTSecret:   cfg.JWTSecret,
-		Logger:      log,
+		AuthHandler:    authHandler,
+		ASTHandler:     astHandler,
+		ProjectHandler: projectHandler,
+		UploadHandler:  uploadHandler,
+		JWTSecret:      cfg.JWTSecret,
+		Logger:         log,
 	})
 
 	go func() {
@@ -68,6 +74,5 @@ func main() {
 	if err := app.ShutdownWithTimeout(10 * time.Second); err != nil {
 		log.Fatal("server forced to shutdown", zap.Error(err))
 	}
-
 	log.Info("server stopped")
 }
