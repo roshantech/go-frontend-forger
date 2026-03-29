@@ -24,13 +24,14 @@ export default function ASTPage() {
   const {
     tabs, activeTabId,
     openFile, updateActiveTab, closeTab, switchTab,
-    setViewMode, setMaxDepth,
+    setViewMode, setViewDensity, setMaxDepth,
     focusPop, focusTo,
   } = useASTViewerStore()
 
   const fileRef = useRef<HTMLInputElement>(null)
   const viewMode = activeTab?.viewMode ?? 'flow'
-  const maxDepth = activeTab?.maxDepth ?? 3
+  const viewDensity = activeTab?.viewDensity ?? 'summary'
+  const maxDepth = activeTab?.maxDepth ?? 2
 
   // ── Resizable right sidebar ────────────────────────────────────────────────
   const [sidebarW, setSidebarW] = useState(SIDEBAR_DEFAULT)
@@ -182,6 +183,28 @@ export default function ASTPage() {
                   className={`px-1 h-4 text-[9px] font-bold uppercase tracking-wider border transition-colors ${
                     maxDepth === 0 ? 'border-primary/60 text-primary bg-primary/10' : 'border-border text-muted-foreground/40 hover:border-primary/40'
                   }`}>∞</button>
+              </div>
+            )}
+
+            <div className="w-px h-3 bg-border" />
+
+            {/* Density toggle (flow mode only) */}
+            {viewMode === 'flow' && (
+              <div className="flex border border-border text-[10px]">
+                <button
+                  onClick={() => setViewDensity('summary')}
+                  title="Summary: hide expression/literal detail nodes — major blocks only"
+                  className={`px-2 py-1 transition-colors ${viewDensity === 'summary' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
+                >
+                  Summary
+                </button>
+                <button
+                  onClick={() => setViewDensity('full')}
+                  title="Full: show all AST nodes"
+                  className={`px-2 py-1 transition-colors ${viewDensity === 'full' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
+                >
+                  Full
+                </button>
               </div>
             )}
 

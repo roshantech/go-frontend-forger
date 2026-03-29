@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { ChevronDown, ChevronRight, Minus } from 'lucide-react'
 import type { ASTFlowNodeData } from '@/lib/astToGraph'
+import { useASTViewerStore } from '@/store/astViewerStore'
 
 export const CATEGORY_COLORS: Record<string, { border: string; label: string; dot: string; bg: string }> = {
   file:       { border: '#6366f1', label: 'text-indigo-300',  dot: 'bg-indigo-400',  bg: '#1e1b4b22' },
@@ -17,7 +18,8 @@ export const CATEGORY_COLORS: Record<string, { border: string; label: string; do
   other:      { border: '#6b7280', label: 'text-gray-400',    dot: 'bg-gray-500',    bg: '#1f212622' },
 }
 
-function ASTNodeComponent({ data, selected }: NodeProps) {
+function ASTNodeComponent({ id, data, selected }: NodeProps) {
+  const toggleExpand = useASTViewerStore(s => s.toggleExpand)
   const d = data as ASTFlowNodeData
   const { node, isExpanded, hasChildren, childCount, isRoot, compact } = d
   const style = CATEGORY_COLORS[node.category] ?? CATEGORY_COLORS.other
@@ -99,10 +101,11 @@ function ASTNodeComponent({ data, selected }: NodeProps) {
           </p>
         )}
 
-        {/* Expand indicator */}
+        {/* Expand indicator — click to toggle inline children */}
         {hasChildren && !isRoot && (
           <div
-            className="flex items-center gap-1 mt-1.5 text-[10px] font-medium"
+            onClick={(e) => { e.stopPropagation(); toggleExpand(id) }}
+            className="flex items-center gap-1 mt-1.5 text-[10px] font-medium cursor-pointer hover:opacity-80"
             style={{ color: isExpanded ? style.border : 'hsl(215,20%,50%)' }}
           >
             {isExpanded

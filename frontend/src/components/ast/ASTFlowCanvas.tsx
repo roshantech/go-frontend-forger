@@ -22,6 +22,9 @@ import { treeToGraph } from '@/lib/astToGraph'
 import { applyDagreLayout } from '@/lib/dagreLayout'
 import type { ASTFlowNodeData } from '@/lib/astToGraph'
 
+const SUMMARY_HIDDEN = new Set(['expression', 'identifier', 'literal', 'other'])
+const FULL_HIDDEN = new Set<string>()
+
 export default function ASTFlowCanvas() {
   const activeTab = useActiveTab()
   const {
@@ -55,12 +58,15 @@ export default function ASTFlowCanvas() {
   const { nodes: layoutNodes, treeEdges } = useMemo(() => {
     if (!activeTab || !focusRootId) return { nodes: [], treeEdges: [] }
 
+    const hiddenCategories = activeTab.viewDensity === 'full' ? FULL_HIDDEN : SUMMARY_HIDDEN
+
     const raw = treeToGraph(
       activeTab.nodeMap,
       focusRootId,
       activeTab.expandedNodeIds,
       activeTab.maxDepth,
       activeTab.customNodes,
+      hiddenCategories,
     )
 
     const customIds = new Set(activeTab.customNodes.keys())
@@ -76,17 +82,19 @@ export default function ASTFlowCanvas() {
     return { nodes: [...laid, ...customList], treeEdges: visEdges }
   }, [activeTab, focusRootId])
 
-  // Click: drill into node if it has children (and isn't already the focus root)
+  // Single click: select node (shows sidebar details)
   const onNodeClick: NodeMouseHandler = useCallback(
+    (_, node) => { selectNode(node.id) },
+    [selectNode],
+  )
+
+  // Double click: drill into node if it has children
+  const onNodeDoubleClick: NodeMouseHandler = useCallback(
     (_, node) => {
       const d = node.data as ASTFlowNodeData
-      if (d.hasChildren && node.id !== focusRootId) {
-        focusPush(node.id)
-      } else {
-        selectNode(node.id)
-      }
+      if (d.hasChildren && node.id !== focusRootId) focusPush(node.id)
     },
-    [focusPush, selectNode, focusRootId],
+    [focusPush, focusRootId],
   )
 
   const onPaneClick = useCallback(() => selectNode(null), [selectNode])
@@ -185,6 +193,7 @@ export default function ASTFlowCanvas() {
       edges={allEdges}
       nodeTypes={astNodeTypes}
       onNodeClick={onNodeClick}
+      onNodeDoubleClick={onNodeDoubleClick}
       onPaneClick={onPaneClick}
       onDrop={onDrop}
       onDragOver={onDragOver}

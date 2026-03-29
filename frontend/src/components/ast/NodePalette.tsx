@@ -1,6 +1,6 @@
 import { useState, type DragEvent } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, Sparkles, Code2, Loader2, GripVertical } from 'lucide-react'
+import { ChevronDown, ChevronRight, Sparkles, Code2, Loader2, GripVertical, BookOpen } from 'lucide-react'
 import { CATEGORY_COLORS } from './ASTNode'
 import { astApi, type TreeNode } from '@/lib/api'
 import { useASTViewerStore } from '@/store/astViewerStore'
@@ -84,11 +84,203 @@ const PALETTE_SECTIONS: { title: string; color: string; items: PaletteTemplate[]
   },
 ]
 
+// ─── Go boilerplate templates ─────────────────────────────────────────────────
+
+interface GoTemplate {
+  name: string
+  description: string
+  filename: string
+  code: string
+}
+
+const GO_TEMPLATES: GoTemplate[] = [
+  {
+    name: 'Error Wrapping',
+    description: 'if err != nil with fmt.Errorf wrap',
+    filename: 'error.go',
+    code: `package main
+
+import "fmt"
+
+func doSomething() error {
+	result, err := riskyOperation()
+	if err != nil {
+		return fmt.Errorf("doSomething: %w", err)
+	}
+	_ = result
+	return nil
+}
+
+func riskyOperation() (string, error) {
+	return "", nil
+}`,
+  },
+  {
+    name: 'HTTP Handler',
+    description: 'Standard net/http handler function',
+    filename: 'handler.go',
+    code: `package main
+
+import (
+	"encoding/json"
+	"net/http"
+)
+
+func handleRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	_ = ctx
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}`,
+  },
+  {
+    name: 'Struct + Constructor',
+    description: 'Struct type with New() constructor',
+    filename: 'struct.go',
+    code: `package main
+
+type Service struct {
+	name    string
+	timeout int
+}
+
+func NewService(name string, timeout int) *Service {
+	return &Service{
+		name:    name,
+		timeout: timeout,
+	}
+}
+
+func (s *Service) Name() string {
+	return s.name
+}`,
+  },
+  {
+    name: 'Interface',
+    description: 'Go interface definition',
+    filename: 'interface.go',
+    code: `package main
+
+type Repository interface {
+	FindByID(id string) (*Item, error)
+	Save(item *Item) error
+	Delete(id string) error
+}
+
+type Item struct {
+	ID   string
+	Name string
+}`,
+  },
+  {
+    name: 'Goroutine + WaitGroup',
+    description: 'Concurrent workers with sync.WaitGroup',
+    filename: 'goroutine.go',
+    code: `package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func processItems(items []string) {
+	var wg sync.WaitGroup
+	for _, item := range items {
+		wg.Add(1)
+		go func(v string) {
+			defer wg.Done()
+			fmt.Println("processing:", v)
+		}(item)
+	}
+	wg.Wait()
+}`,
+  },
+  {
+    name: 'Graceful Shutdown',
+    description: 'OS signal + context cancellation',
+    filename: 'shutdown.go',
+    code: `package main
+
+import (
+	"context"
+	"os"
+	"os/signal"
+	"syscall"
+)
+
+func runWithGracefulShutdown(ctx context.Context) error {
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	<-ctx.Done()
+	return nil
+}`,
+  },
+  {
+    name: 'Config Struct',
+    description: 'Environment-based config with defaults',
+    filename: 'config.go',
+    code: `package main
+
+import "os"
+
+type Config struct {
+	Host     string
+	Port     string
+	LogLevel string
+}
+
+func LoadConfig() Config {
+	return Config{
+		Host:     getEnv("HOST", "localhost"),
+		Port:     getEnv("PORT", "8080"),
+		LogLevel: getEnv("LOG_LEVEL", "info"),
+	}
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}`,
+  },
+  {
+    name: 'Table-Driven Test',
+    description: 'Go testing with table test cases',
+    filename: 'test.go',
+    code: `package main
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	cases := []struct {
+		name     string
+		a, b     int
+		expected int
+	}{
+		{"positive", 1, 2, 3},
+		{"zero", 0, 0, 0},
+		{"negative", -1, 1, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.a + tc.b
+			if got != tc.expected {
+				t.Errorf("got %d, want %d", got, tc.expected)
+			}
+		})
+	}
+}`,
+  },
+]
+
 // ─── NodePalette component ────────────────────────────────────────────────────
 
 export default function NodePalette() {
   const { addCustomNode } = useASTViewerStore()
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(['Structure', 'Statements']))
+  const [templatesOpen, setTemplatesOpen] = useState(true)
   const [snippet, setSnippet] = useState('')
   const [snippetName, setSnippetName] = useState('snippet.go')
 
@@ -174,6 +366,44 @@ export default function NodePalette() {
             </div>
           )
         })}
+
+        {/* Go Templates */}
+        <div className="border-b border-border/40">
+          <button
+            onClick={() => setTemplatesOpen(o => !o)}
+            className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-accent/30 transition-colors text-left"
+          >
+            {templatesOpen
+              ? <ChevronDown size={10} className="text-muted-foreground/40 shrink-0" />
+              : <ChevronRight size={10} className="text-muted-foreground/40 shrink-0" />
+            }
+            <BookOpen size={10} className="shrink-0" style={{ color: '#a855f7' }} />
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#a855f7' }}>
+              Go Templates
+            </span>
+            <span className="ml-auto text-[9px] text-muted-foreground/30">{GO_TEMPLATES.length}</span>
+          </button>
+
+          {templatesOpen && (
+            <div className="pb-1">
+              {GO_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.name}
+                  onClick={() => { setSnippetName(tpl.filename); parseSnippet(tpl.code) }}
+                  disabled={parsing}
+                  className="w-full flex flex-col gap-0.5 mx-0 px-3 py-1.5 text-left hover:bg-accent/40 transition-colors border-l-2 disabled:opacity-40"
+                  style={{ borderLeftColor: '#a855f7' }}
+                  title={tpl.description}
+                >
+                  <span className="text-[10px] font-mono font-semibold" style={{ color: '#a855f7' }}>
+                    {tpl.name}
+                  </span>
+                  <span className="text-[9px] text-muted-foreground/50 leading-tight">{tpl.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Generate from snippet */}
         <div className="p-3 border-t border-border/40">

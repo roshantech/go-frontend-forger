@@ -4,6 +4,7 @@ import type { TreeNode, FileInspection } from '@/lib/api'
 import { buildNodeMap } from '@/lib/astToGraph'
 
 export type ViewMode = 'flow' | 'code'
+export type ViewDensity = 'summary' | 'full'
 
 export interface CustomNodeEntry {
   node: TreeNode
@@ -25,6 +26,7 @@ export interface TabState {
   focusStack: string[]
   viewMode: ViewMode
   maxDepth: number
+  viewDensity: ViewDensity
 }
 
 interface ASTViewerStore {
@@ -41,6 +43,7 @@ interface ASTViewerStore {
   // Per-active-tab mutations
   toggleExpand: (id: string) => void
   setViewMode: (m: ViewMode) => void
+  setViewDensity: (d: ViewDensity) => void
   setMaxDepth: (d: number) => void
   addCustomNode: (node: TreeNode, position: { x: number; y: number }) => void
   removeCustomNode: (id: string) => void
@@ -83,7 +86,8 @@ function makeTab(
     hiddenNodeIds: new Set(),
     focusStack: [],
     viewMode,
-    maxDepth: 3,
+    maxDepth: 2,
+    viewDensity: 'summary',
   }
 }
 
@@ -155,6 +159,11 @@ export const useASTViewerStore = create<ASTViewerStore>((set, get) => ({
   setViewMode: (m) => {
     const { tabs, activeTabId } = get()
     set({ tabs: applyPatch(tabs, activeTabId, { viewMode: m }) })
+  },
+
+  setViewDensity: (d) => {
+    const { tabs, activeTabId } = get()
+    set({ tabs: applyPatch(tabs, activeTabId, { viewDensity: d }) })
   },
 
   setMaxDepth: (d) => {

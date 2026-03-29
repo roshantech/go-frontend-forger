@@ -30,13 +30,15 @@ export function buildNodeMap(tree: TreeNode): Map<string, TreeNode> {
  * - maxDepth: 0 = unlimited, 1+ = max depth to auto-show (expand overrides)
  * - Nodes at depth > 2 get compact=true unless selected
  * - Custom nodes from palette are appended at their stored positions
+ * - hiddenCategories: nodes in these categories are skipped (and their subtrees)
  */
 export function treeToGraph(
   nodeMap: Map<string, TreeNode>,
   rootId: string,
   expandedNodeIds: Set<string>,
   maxDepth: number = 0,
-  customNodes: Map<string, CustomNodeEntry> = new Map()
+  customNodes: Map<string, CustomNodeEntry> = new Map(),
+  hiddenCategories: Set<string> = new Set()
 ): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = []
   const edges: Edge[] = []
@@ -45,6 +47,9 @@ export function treeToGraph(
   function add(id: string, parentId: string | null, depth: number) {
     const n = nodeMap.get(id)
     if (!n) return
+
+    // Skip nodes in hidden categories (except the root itself)
+    if (id !== rootId && hiddenCategories.has(n.category)) return
 
     const children = n.children ?? []
     const isRoot = id === rootId
