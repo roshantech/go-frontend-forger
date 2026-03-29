@@ -1,162 +1,194 @@
-import { useCallback, useRef } from 'react'
+import { useMemo, useCallback } from 'react'
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
-  addEdge,
   BackgroundVariant,
-  type Connection,
-  type NodeMouseHandler,
-  type OnNodesChange,
-  type OnEdgesChange,
-  applyNodeChanges,
-  applyEdgeChanges,
+  type Node,
+  type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useProjectStore, type WorkflowNode, type WorkflowEdge, type WorkflowNodeData } from '@/store/projectStore'
-import { nanoid } from './nanoid'
+import dagre from 'dagre'
+import { useFileTreeStore, getVisibleIds, type FTreeItem } from '@/store/fileTreeStore'
+import { RootNode }   from './RootNode'
+import { FolderNode } from './FolderNode'
+import { FileNode }   from './FileNode'
+import { getLanguageFromPath } from '@/lib/utils'
 
-const KIND_COLORS: Record<string, string> = {
-  trigger:   '#f59e0b',
-  input:     '#38bdf8',
-  processor: '#34d399',
-  condition: '#fb7185',
-  action:    '#818cf8',
-  output:    '#a78bfa',
+const NODE_TYPES = {
+  rootNode:   RootNode,
+  folderNode: FolderNode,
+  fileNode:   FileNode,
 }
 
-function WorkflowNodeComponent({ data, selected }: { data: WorkflowNodeData; selected: boolean }) {
-  const color = KIND_COLORS[data.kind] ?? '#64748b'
-  return (
-    <div
-      className={`rounded-xl border px-4 py-3 min-w-[160px] shadow-lg transition-all
-        ${selected ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}
-      `}
-      style={{
-        background: 'hsl(222,47%,9%)',
-        borderColor: selected ? color : 'hsl(216,34%,18%)',
-      }}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        <span
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ background: color }}
-        />
-        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color }}>
-          {data.kind}
-        </span>
-      </div>
-      <p className="text-sm font-medium text-foreground truncate">{data.label}</p>
-      {data.subtitle && (
-        <p className="text-xs text-muted-foreground truncate mt-0.5">{data.subtitle}</p>
-      )}
-      <div
-        className="mt-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs"
-        style={{
-          background: `${color}22`,
-          color,
-        }}
-      >
-        {data.status}
-      </div>
-    </div>
-  )
+const ROOT_W  = 200
+const FOLD_W  = 172
+const FILE_W  = 152
+const NODE_H  = 48
+
+function nodeWidth(type: FTreeItem['type']) {
+  if (type === 'root')   return ROOT_W
+  if (type === 'folder') return FOLD_W
+  return FILE_W
 }
 
-const nodeTypes = { workflow: WorkflowNodeComponent }
+function applyLayout(nodes: Node[], edges: Edge[]): Node[] {
+  const g = new dagre.graphlib.Graph()
+  g.setDefaultEdgeLabel(() => ({}))
+  g.setGraph({ rankdir: 'TB', nodesep: 36, ranksep: 56 })
 
-interface Props {
-  onNodeClick?: (id: string) => void
+  for (const n of nodes) {
+    const item = n.data as { itemType: FTreeItem['type'] }
+    g.setNode(n.id, { width: nodeWidth(item.itemType), height: NODE_H })
+  }
+  for (const e of edges) g.setEdge(e.source, e.target)
+
+  dagre.layout(g)
+
+  return nodes.map((n) => {
+    const pos = g.node(n.id)
+    const item = n.data as { itemType: FTreeItem['type'] }
+    const w = nodeWidth(item.itemType)
+    return { ...n, position: { x: pos.x - w / 2, y: pos.y - NODE_H / 2 } }
+  })
 }
 
-export default function TreeCanvas({ onNodeClick }: Props) {
-  const { nodes, edges, setNodes, setEdges, snapshot, selectedNodeId, setSelectedNodeId } = useProjectStore()
-  const containerRef = useRef<HTMLDivElement>(null)
+function buildFlow(
+  items: Record<string, import('@/store/fileTreeStore').FTreeItem>,
+  visibleIds: string[],
+  expandedIds: Set<string>,
+  selectedFileId: string | null,
+  onToggle: (id: string) => void,
+  onSelect: (id: string) => void,
+): { nodes: Node[]; edges: Edge[] } {
+  const visSet = new Set(visibleIds)
+  const totalFiles = Object.values(items).filter(i => i.type === 'file').length
 
-  const onNodesChange: OnNodesChange = useCallback(
-    (changes) => setNodes(applyNodeChanges(changes, nodes) as WorkflowNode[]),
-    [nodes, setNodes]
-  )
+  const nodes: Node[] = visibleIds.map((id) => {
+    const item = items[id]
 
-  const onEdgesChange: OnEdgesChange = useCallback(
-    (changes) => setEdges(applyEdgeChanges(changes, edges) as WorkflowEdge[]),
-    [edges, setEdges]
-  )
-
-  const onConnect = useCallback(
-    (connection: Connection) => {
-      snapshot()
-      setEdges(addEdge(connection, edges) as WorkflowEdge[])
-    },
-    [edges, setEdges, snapshot]
-  )
-
-  const handleNodeClick: NodeMouseHandler = useCallback(
-    (_, node) => {
-      setSelectedNodeId(node.id)
-      onNodeClick?.(node.id)
-    },
-    [setSelectedNodeId, onNodeClick]
-  )
-
-  const handlePaneClick = useCallback(() => setSelectedNodeId(null), [setSelectedNodeId])
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault()
-      const kind = e.dataTransfer.getData('application/x-forge-node') as WorkflowNodeData['kind']
-      if (!kind || !containerRef.current) return
-
-      const rect = containerRef.current.getBoundingClientRect()
-      snapshot()
-      const newNode: WorkflowNode = {
-        id: nanoid(),
-        type: 'workflow',
-        position: { x: e.clientX - rect.left - 80, y: e.clientY - rect.top - 40 },
+    if (item.type === 'root') {
+      return {
+        id,
+        type: 'rootNode',
+        position: { x: 0, y: 0 },
         data: {
-          kind,
-          label: `New ${kind}`,
-          subtitle: '',
-          description: '',
-          accent: KIND_COLORS[kind] ?? '#64748b',
-          status: 'draft',
-          notes: '',
-          config: {},
+          itemType: 'root',
+          name: item.name,
+          language: 'go',
+          fileCount: totalFiles,
         },
       }
-      setNodes([...nodes, newNode])
-    },
-    [nodes, setNodes, snapshot]
+    }
+
+    if (item.type === 'folder') {
+      const visibleChildren = (item.children ?? []).filter(c => visSet.has(c)).length
+      return {
+        id,
+        type: 'folderNode',
+        position: { x: 0, y: 0 },
+        data: {
+          itemType: 'folder',
+          name: item.name,
+          isExpanded: expandedIds.has(id),
+          childCount: item.children?.length ?? 0,
+          visibleChildCount: visibleChildren,
+          onToggle: () => onToggle(id),
+        },
+      }
+    }
+
+    // file
+    const lang = getLanguageFromPath(item.name)
+    return {
+      id,
+      type: 'fileNode',
+      position: { x: 0, y: 0 },
+      data: {
+        itemType: 'file',
+        name: item.name,
+        language: lang,
+        isSelected: selectedFileId === id,
+        onSelect: () => onSelect(id),
+      },
+    }
+  })
+
+  const edges: Edge[] = []
+  for (const id of visibleIds) {
+    const item = items[id]
+    if ((item.type === 'root' || item.type === 'folder') && expandedIds.has(id)) {
+      for (const childId of item.children ?? []) {
+        if (visSet.has(childId)) {
+          edges.push({
+            id: `e-${id}-${childId}`,
+            source: id,
+            target: childId,
+            type: 'smoothstep',
+            style: { stroke: 'var(--border-default)', strokeWidth: 1.5 },
+          })
+        }
+      }
+    }
+  }
+
+  return { nodes: applyLayout(nodes, edges), edges }
+}
+
+export default function TreeCanvas() {
+  const { items, expandedIds, selectedFileId, toggleFolder, selectFile } = useFileTreeStore()
+
+  const visibleIds = useMemo(
+    () => getVisibleIds(items, expandedIds),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, Array.from(expandedIds).join(',')]
   )
 
+  const { nodes, edges } = useMemo(
+    () => buildFlow(items, visibleIds, expandedIds, selectedFileId, toggleFolder, selectFile),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleIds, selectedFileId, Array.from(expandedIds).join(',')]
+  )
+
+  const handlePaneClick = useCallback(() => selectFile(null), [selectFile])
+
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-full"
-      onDrop={handleDrop}
-      onDragOver={(e) => e.preventDefault()}
-    >
+    <div style={{ width: '100%', height: '100%', background: 'var(--bg-base)' }}>
       <ReactFlow
-        nodes={nodes.map((n) => ({ ...n, selected: n.id === selectedNodeId }))}
+        nodes={nodes}
         edges={edges}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodeClick={handleNodeClick}
-        onPaneClick={handlePaneClick}
-        snapToGrid
-        snapGrid={[16, 16]}
-        minZoom={0.3}
-        maxZoom={1.5}
+        nodeTypes={NODE_TYPES}
         fitView
+        fitViewOptions={{ padding: 0.2 }}
+        minZoom={0.15}
+        maxZoom={2.5}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={true}
+        proOptions={{ hideAttribution: true }}
+        onPaneClick={handlePaneClick}
       >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="hsl(216,34%,18%)" />
-        <Controls />
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={24}
+          size={1}
+          color="var(--border-subtle)"
+        />
+        <Controls showInteractive={false} />
         <MiniMap
-          nodeColor={(n) => KIND_COLORS[(n.data as WorkflowNodeData)?.kind] ?? '#64748b'}
-          maskColor="rgba(15,23,42,0.6)"
+          nodeColor={(n) => {
+            const t = (n.data as { itemType?: string }).itemType
+            if (t === 'root')   return 'var(--accent)'
+            if (t === 'folder') return 'var(--border-strong)'
+            return 'var(--border-default)'
+          }}
+          maskColor="rgba(10,10,15,0.75)"
+          style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 8,
+          }}
         />
       </ReactFlow>
     </div>

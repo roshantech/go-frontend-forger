@@ -51,15 +51,15 @@ function ASTNodeComponent({ data, selected }: NodeProps) {
           )}
         </div>
 
-        {/* AST type */}
-        <p className="text-xs font-semibold text-foreground/90 font-mono truncate leading-tight">
-          {node.type}
+        {/* Primary label — name/value if available, else type */}
+        <p className="text-xs font-semibold font-mono truncate leading-tight" style={{ color: style.border }}>
+          {node.name || node.value || node.type}
         </p>
 
-        {/* Name / value */}
+        {/* Secondary — AST type, only when there's a name above */}
         {(node.name || node.value) && (
-          <p className="text-xs font-mono truncate mt-0.5" style={{ color: style.border }}>
-            {node.name || node.value}
+          <p className="text-[10px] text-muted-foreground/50 font-mono truncate mt-0.5">
+            {node.type}
           </p>
         )}
 

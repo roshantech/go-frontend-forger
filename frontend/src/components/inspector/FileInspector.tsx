@@ -1,234 +1,195 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { ChevronDown, ChevronRight, Search } from 'lucide-react'
 import type { FileInspection, FunctionInfo, TypeInfo, InterfaceInfo, VarInfo, ImportInfo } from '@/lib/api'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { FileTypeIcon } from '@/components/ui/FileTypeIcon'
 
 interface Props {
   inspection: FileInspection
 }
 
-export default function FileInspector({ inspection }: Props) {
-  return (
-    <div className="h-full overflow-y-auto inspector-scroll p-4 space-y-3">
-      {/* Header */}
-      <div className="pb-3 border-b border-border">
-        <p className="text-sm font-semibold text-foreground">{inspection.fileName}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          package <span className="text-primary font-mono">{inspection.packageName}</span>
-        </p>
-      </div>
-
-      {inspection.parseErrors && inspection.parseErrors.length > 0 && (
-        <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-3">
-          <p className="text-xs font-semibold text-destructive mb-1">Parse errors</p>
-          {inspection.parseErrors.map((e, i) => (
-            <p key={i} className="text-xs text-destructive/80 font-mono">{e}</p>
-          ))}
-        </div>
-      )}
-
-      <Section
-        title="Functions"
-        count={inspection.functions.length}
-        color="text-yellow-400"
-      >
-        {inspection.functions.map((fn) => (
-          <FunctionCard key={fn.name + fn.lineStart} fn={fn} />
-        ))}
-      </Section>
-
-      <Section
-        title="Types"
-        count={inspection.types.length}
-        color="text-sky-400"
-      >
-        {inspection.types.map((t) => (
-          <TypeCard key={t.name} type={t} />
-        ))}
-      </Section>
-
-      <Section
-        title="Interfaces"
-        count={inspection.interfaces.length}
-        color="text-emerald-400"
-      >
-        {inspection.interfaces.map((iface) => (
-          <InterfaceCard key={iface.name} iface={iface} />
-        ))}
-      </Section>
-
-      <Section
-        title="Imports"
-        count={inspection.imports.length}
-        color="text-purple-400"
-      >
-        <div className="space-y-0.5">
-          {inspection.imports.map((imp) => (
-            <ImportRow key={imp.path} imp={imp} />
-          ))}
-        </div>
-      </Section>
-
-      <Section
-        title="Variables"
-        count={inspection.variables.length}
-        color="text-orange-400"
-      >
-        {inspection.variables.map((v) => (
-          <VarRow key={v.name} v={v} />
-        ))}
-      </Section>
-
-      <Section
-        title="Constants"
-        count={inspection.constants.length}
-        color="text-rose-400"
-      >
-        {inspection.constants.map((c) => (
-          <VarRow key={c.name} v={c} isConst />
-        ))}
-      </Section>
-    </div>
-  )
-}
-
+// ─── Section wrapper ──────────────────────────────────────────
 function Section({
-  title,
-  count,
-  color,
-  children,
+  title, count, children,
 }: {
-  title: string
-  count: number
-  color: string
-  children: React.ReactNode
+  title: string; count: number; children: React.ReactNode
 }) {
   const [open, setOpen] = useState(true)
-
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
+    <div style={{ borderBottom: '1px solid var(--border-subtle)' }}>
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-card hover:bg-accent transition-colors"
         data-testid={`section-${title.toLowerCase()}`}
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '7px 12px', background: 'transparent', border: 'none', cursor: 'pointer',
+          transition: 'background 100ms',
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-raised)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
       >
-        <div className="flex items-center gap-2">
-          {open ? <ChevronDown size={13} className="text-muted-foreground" /> : <ChevronRight size={13} className="text-muted-foreground" />}
-          <span className={`text-xs font-semibold ${color}`}>{title}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {open
+            ? <ChevronDown  size={11} style={{ color: 'var(--text-disabled)' }} />
+            : <ChevronRight size={11} style={{ color: 'var(--text-disabled)' }} />
+          }
+          <span style={{
+            fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: 'var(--accent)',
+          }}>
+            {title}
+          </span>
         </div>
-        <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+        <span style={{
+          fontSize: 10, fontFamily: 'var(--font-mono)',
+          color: 'var(--text-disabled)',
+          background: 'var(--bg-raised)',
+          padding: '1px 5px', borderRadius: 4,
+        }}>
           {count}
         </span>
       </button>
       {open && count > 0 && (
-        <div className="p-2 space-y-1 bg-background/30">{children}</div>
+        <div style={{ padding: '0 8px 8px' }}>{children}</div>
       )}
       {open && count === 0 && (
-        <p className="text-xs text-muted-foreground/60 px-3 py-2 bg-background/30">None</p>
+        <p style={{ fontSize: 11, color: 'var(--text-disabled)', padding: '4px 12px 8px', fontStyle: 'italic' }}>
+          None
+        </p>
       )}
     </div>
   )
 }
 
-function FunctionCard({ fn }: { fn: FunctionInfo }) {
+// ─── Function row ─────────────────────────────────────────────
+function FunctionRow({ fn, onGoto }: { fn: FunctionInfo; onGoto?: (line: number) => void }) {
   const [exp, setExp] = useState(false)
   return (
     <div
-      className="rounded-md border border-border/60 bg-card/50 overflow-hidden"
       data-testid={`fn-${fn.name}`}
+      style={{
+        borderRadius: 6, overflow: 'hidden',
+        border: '1px solid var(--border-subtle)', marginBottom: 3,
+      }}
     >
       <button
-        onClick={() => setExp((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-accent/50 transition-colors text-left"
+        onClick={() => setExp(v => !v)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 0,
+          background: 'var(--bg-raised)', border: 'none', cursor: 'pointer',
+          padding: 0, transition: 'background 100ms',
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-raised)'}
       >
-        <div className="flex items-center gap-1.5 min-w-0">
-          {exp ? <ChevronDown size={11} className="shrink-0 text-muted-foreground" /> : <ChevronRight size={11} className="shrink-0 text-muted-foreground" />}
+        {/* 2px accent bar */}
+        <div style={{
+          width: 2, alignSelf: 'stretch', flexShrink: 0,
+          background: fn.isExported ? 'var(--accent)' : 'var(--border-strong)',
+        }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', flex: 1, minWidth: 0 }}>
+          {exp
+            ? <ChevronDown  size={10} style={{ color: 'var(--text-disabled)', flexShrink: 0 }} />
+            : <ChevronRight size={10} style={{ color: 'var(--text-disabled)', flexShrink: 0 }} />
+          }
           {fn.receiver && (
-            <span className="text-xs text-muted-foreground font-mono shrink-0">({fn.receiver})</span>
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-disabled)', flexShrink: 0 }}>
+              ({fn.receiver})
+            </span>
           )}
-          <span className={`text-xs font-mono font-semibold truncate ${fn.isExported ? 'text-yellow-300' : 'text-foreground'}`}>
+          <span style={{
+            fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 500,
+            color: fn.isExported ? 'var(--text-primary)' : 'var(--text-secondary)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+          }}>
             {fn.name}
           </span>
         </div>
-        <span className="text-xs text-muted-foreground/50 shrink-0 ml-1">:{fn.lineStart}</span>
+
+        {/* Line number pill */}
+        <button
+          onClick={e => { e.stopPropagation(); onGoto?.(fn.lineStart) }}
+          style={{
+            flexShrink: 0, marginRight: 8,
+            fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 600,
+            color: 'var(--accent)', background: 'var(--accent-muted)',
+            padding: '2px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
+            transition: 'background 100ms',
+          }}
+          onMouseEnter={e => { e.stopPropagation(); e.currentTarget.style.background = 'rgba(99,102,241,0.22)' }}
+          onMouseLeave={e => e.currentTarget.style.background = 'var(--accent-muted)'}
+          title="Go to line"
+        >
+          L{fn.lineStart}
+        </button>
       </button>
+
       {exp && (
-        <div className="px-3 pb-2 space-y-1 text-xs font-mono text-muted-foreground border-t border-border/40">
-          {fn.comment && <p className="text-green-400/70 pt-1 italic">{fn.comment}</p>}
+        <div style={{
+          padding: '6px 10px 8px 18px',
+          borderTop: '1px solid var(--border-subtle)',
+          background: 'var(--bg-base)',
+          fontSize: 10, fontFamily: 'var(--font-mono)',
+          display: 'flex', flexDirection: 'column', gap: 3,
+        }}>
+          {fn.comment && (
+            <span style={{ color: '#10B981', fontStyle: 'italic' }}>{fn.comment}</span>
+          )}
           {fn.params.length > 0 && (
-            <p><span className="text-sky-400/70">params: </span>{fn.params.join(', ')}</p>
+            <div>
+              <span style={{ color: 'var(--text-disabled)' }}>params </span>
+              {fn.params.map((p, i) => (
+                <span key={i}>
+                  <span style={{ color: 'var(--lang-ts)', background: 'var(--lang-ts-bg)', padding: '1px 4px', borderRadius: 3, marginRight: 3 }}>{p}</span>
+                </span>
+              ))}
+            </div>
           )}
           {fn.returns.length > 0 && (
-            <p><span className="text-purple-400/70">returns: </span>{fn.returns.join(', ')}</p>
+            <div>
+              <span style={{ color: 'var(--text-disabled)' }}>returns </span>
+              {fn.returns.map((r, i) => (
+                <span key={i} style={{ color: 'var(--lang-go)', background: 'var(--lang-go-bg)', padding: '1px 4px', borderRadius: 3, marginRight: 3 }}>{r}</span>
+              ))}
+            </div>
           )}
-          <p className="text-muted-foreground/40">lines {fn.lineStart}–{fn.lineEnd}</p>
+          <span style={{ color: 'var(--text-disabled)' }}>lines {fn.lineStart}–{fn.lineEnd}</span>
         </div>
       )}
     </div>
   )
 }
 
-function TypeCard({ type: t }: { type: TypeInfo }) {
+// ─── Type row ─────────────────────────────────────────────────
+function TypeRow({ type: t }: { type: TypeInfo }) {
   const [exp, setExp] = useState(false)
   return (
-    <div className="rounded-md border border-border/60 bg-card/50 overflow-hidden">
+    <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-subtle)', marginBottom: 3 }}>
       <button
-        onClick={() => setExp((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-accent/50 transition-colors text-left"
+        onClick={() => setExp(v => !v)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 0,
+          background: 'var(--bg-raised)', border: 'none', cursor: 'pointer', padding: 0,
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-raised)'}
       >
-        <div className="flex items-center gap-1.5">
-          {exp ? <ChevronDown size={11} className="text-muted-foreground" /> : <ChevronRight size={11} className="text-muted-foreground" />}
-          <span className={`text-xs font-mono font-semibold ${t.isExported ? 'text-sky-300' : 'text-foreground'}`}>
-            {t.name}
-          </span>
-          <span className="text-xs text-muted-foreground/50">{t.kind}</span>
+        <div style={{ width: 2, alignSelf: 'stretch', flexShrink: 0, background: t.isExported ? 'var(--lang-ts)' : 'var(--border-strong)' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', flex: 1, minWidth: 0 }}>
+          {exp ? <ChevronDown size={10} style={{ color: 'var(--text-disabled)' }} /> : <ChevronRight size={10} style={{ color: 'var(--text-disabled)' }} />}
+          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 500, color: t.isExported ? 'var(--text-primary)' : 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+          <span style={{ fontSize: 9, color: 'var(--text-disabled)', marginRight: 4 }}>{t.kind}</span>
         </div>
-        {t.fields && (
-          <span className="text-xs text-muted-foreground/50">{t.fields.length} fields</span>
-        )}
+        {t.fields && <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-disabled)', marginRight: 8 }}>{t.fields.length}f</span>}
       </button>
       {exp && t.fields && t.fields.length > 0 && (
-        <div className="px-3 pb-2 border-t border-border/40">
-          <table className="w-full text-xs font-mono mt-1">
-            <tbody>
-              {t.fields.map((f) => (
-                <tr key={f.name} className="border-b border-border/20 last:border-0">
-                  <td className="py-0.5 pr-3 text-foreground/80">{f.name}</td>
-                  <td className="py-0.5 pr-3 text-sky-400/80">{f.type}</td>
-                  {f.tag && <td className="py-0.5 text-muted-foreground/50 text-[10px]">{f.tag}</td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function InterfaceCard({ iface }: { iface: InterfaceInfo }) {
-  const [exp, setExp] = useState(false)
-  return (
-    <div className="rounded-md border border-border/60 bg-card/50 overflow-hidden">
-      <button
-        onClick={() => setExp((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-accent/50 transition-colors text-left"
-      >
-        <div className="flex items-center gap-1.5">
-          {exp ? <ChevronDown size={11} className="text-muted-foreground" /> : <ChevronRight size={11} className="text-muted-foreground" />}
-          <span className={`text-xs font-mono font-semibold ${iface.isExported ? 'text-emerald-300' : 'text-foreground'}`}>
-            {iface.name}
-          </span>
-        </div>
-        <span className="text-xs text-muted-foreground/50">{iface.methods.length} methods</span>
-      </button>
-      {exp && iface.methods.length > 0 && (
-        <div className="px-3 pb-2 space-y-1 border-t border-border/40 pt-1">
-          {iface.methods.map((m) => (
-            <p key={m.name} className="text-xs font-mono text-foreground/70">
-              <span className="text-emerald-400/80">{m.name}</span>
-              ({m.params.join(', ')})
-              {m.returns.length > 0 && <span className="text-muted-foreground"> → {m.returns.join(', ')}</span>}
-            </p>
+        <div style={{ padding: '4px 10px 6px 12px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-base)' }}>
+          {t.fields.map(f => (
+            <div key={f.name} style={{ display: 'flex', gap: 8, padding: '2px 0', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+              <span style={{ color: 'var(--text-secondary)', minWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
+              <span style={{ color: 'var(--lang-ts)' }}>{f.type}</span>
+              {f.tag && <span style={{ color: 'var(--text-disabled)', fontSize: 9 }}>{f.tag}</span>}
+            </div>
           ))}
         </div>
       )}
@@ -236,25 +197,219 @@ function InterfaceCard({ iface }: { iface: InterfaceInfo }) {
   )
 }
 
-function ImportRow({ imp }: { imp: ImportInfo }) {
+// ─── Interface row ────────────────────────────────────────────
+function InterfaceRow({ iface }: { iface: InterfaceInfo }) {
+  const [exp, setExp] = useState(false)
   return (
-    <div className="flex items-center gap-2 px-2 py-0.5 rounded hover:bg-accent/30">
-      {imp.alias && (
-        <span className="text-xs font-mono text-orange-300/70">{imp.alias}</span>
+    <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-subtle)', marginBottom: 3 }}>
+      <button
+        onClick={() => setExp(v => !v)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 0, background: 'var(--bg-raised)', border: 'none', cursor: 'pointer', padding: 0 }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-raised)'}
+      >
+        <div style={{ width: 2, alignSelf: 'stretch', flexShrink: 0, background: 'var(--color-success)' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', flex: 1 }}>
+          {exp ? <ChevronDown size={10} style={{ color: 'var(--text-disabled)' }} /> : <ChevronRight size={10} style={{ color: 'var(--text-disabled)' }} />}
+          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--text-primary)' }}>{iface.name}</span>
+        </div>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-disabled)', marginRight: 8 }}>{iface.methods.length}m</span>
+      </button>
+      {exp && iface.methods.length > 0 && (
+        <div style={{ padding: '4px 10px 6px 12px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-base)' }}>
+          {iface.methods.map(m => (
+            <div key={m.name} style={{ fontSize: 10, fontFamily: 'var(--font-mono)', padding: '2px 0', color: 'var(--text-secondary)' }}>
+              <span style={{ color: 'var(--color-success)' }}>{m.name}</span>
+              ({m.params.join(', ')})
+              {m.returns.length > 0 && <span style={{ color: 'var(--text-disabled)' }}> → {m.returns.join(', ')}</span>}
+            </div>
+          ))}
+        </div>
       )}
-      <span className="text-xs font-mono text-purple-300/80">{imp.path}</span>
     </div>
   )
 }
 
+// ─── Imports (grouped) ────────────────────────────────────────
+function ImportsPanel({ imports }: { imports: ImportInfo[] }) {
+  const stdlibCorrect     = imports.filter(i => !i.path.includes('.') && !i.path.startsWith('/'))
+  const internalCorrect   = imports.filter(i => i.path.includes('forge') || i.path.startsWith('./') || i.path.startsWith('../'))
+  const thirdPartyCorrect = imports.filter(i => !stdlibCorrect.includes(i) && !internalCorrect.includes(i))
+
+  const groups = [
+    { label: 'Standard Library', items: stdlibCorrect,     color: 'var(--lang-go)' },
+    { label: 'Third-party',       items: thirdPartyCorrect, color: 'var(--accent)'  },
+    { label: 'Internal',          items: internalCorrect,   color: 'var(--lang-py)' },
+  ].filter(g => g.items.length > 0)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {groups.map(group => (
+        <div key={group.label}>
+          <div style={{
+            fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
+            color: group.color, marginBottom: 4, padding: '0 2px',
+          }}>
+            {group.label}
+          </div>
+          {group.items.map(imp => (
+            <div key={imp.path} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '3px 6px', borderRadius: 4, marginBottom: 1,
+              fontSize: 11, fontFamily: 'var(--font-mono)',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-raised)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              {imp.alias && <span style={{ color: 'var(--lang-py)', flexShrink: 0 }}>{imp.alias}</span>}
+              <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{imp.path}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Var row ──────────────────────────────────────────────────
 function VarRow({ v, isConst }: { v: VarInfo; isConst?: boolean }) {
   return (
-    <div className="flex items-center gap-2 px-2 py-0.5 rounded hover:bg-accent/30">
-      <span className={`text-xs font-mono ${v.isExported ? (isConst ? 'text-rose-300' : 'text-orange-300') : 'text-foreground/70'}`}>
-        {v.name}
-      </span>
-      {v.type && <span className="text-xs font-mono text-sky-400/60">{v.type}</span>}
-      {v.value && <span className="text-xs font-mono text-muted-foreground/60">= {v.value}</span>}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 6px', borderRadius: 4, fontSize: 11, fontFamily: 'var(--font-mono)' }}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-raised)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+    >
+      <span style={{ color: v.isExported ? (isConst ? 'var(--color-error)' : 'var(--color-warning)') : 'var(--text-secondary)' }}>{v.name}</span>
+      {v.type  && <span style={{ color: 'var(--lang-ts)', fontSize: 10 }}>{v.type}</span>}
+      {v.value && <span style={{ color: 'var(--text-disabled)', fontSize: 10 }}>= {v.value}</span>}
+    </div>
+  )
+}
+
+// ─── Main export ──────────────────────────────────────────────
+export default function FileInspector({ inspection }: Props) {
+  const [query, setQuery]       = useState('')
+  const [exportedOnly, setExportedOnly] = useState(false)
+
+  const q = query.toLowerCase()
+
+  const fns  = useMemo(() => inspection.functions.filter(f =>
+    f.name.toLowerCase().includes(q) && (!exportedOnly || f.isExported)
+  ), [inspection.functions, q, exportedOnly])
+
+  const types = useMemo(() => inspection.types.filter(t =>
+    t.name.toLowerCase().includes(q) && (!exportedOnly || t.isExported)
+  ), [inspection.types, q, exportedOnly])
+
+  const ifaces = useMemo(() => inspection.interfaces.filter(i =>
+    i.name.toLowerCase().includes(q) && (!exportedOnly || i.isExported)
+  ), [inspection.interfaces, q, exportedOnly])
+
+  const imports = useMemo(() => inspection.imports.filter(i =>
+    i.path.toLowerCase().includes(q)
+  ), [inspection.imports, q])
+
+  const vars = useMemo(() => inspection.variables.filter(v =>
+    v.name.toLowerCase().includes(q) && (!exportedOnly || v.isExported)
+  ), [inspection.variables, q, exportedOnly])
+
+  const consts = useMemo(() => inspection.constants.filter(c =>
+    c.name.toLowerCase().includes(q) && (!exportedOnly || c.isExported)
+  ), [inspection.constants, q, exportedOnly])
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+
+      {/* ── File header ── */}
+      <div style={{
+        padding: '8px 12px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <FileTypeIcon language="go" size="sm" />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {inspection.fileName}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-disabled)', fontFamily: 'var(--font-mono)' }}>
+            package <span style={{ color: 'var(--lang-go)' }}>{inspection.packageName}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Search + toggle ── */}
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Search bar */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: 'var(--bg-raised)', border: '1px solid var(--border-default)',
+          borderRadius: 6, padding: '5px 8px',
+          transition: 'border-color 150ms',
+        }}
+        onFocusCapture={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--accent)'}
+        onBlurCapture={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border-default)'}
+        >
+          <Search size={11} style={{ color: 'var(--text-disabled)', flexShrink: 0 }} />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search functions, types…"
+            style={{
+              flex: 1, background: 'transparent', border: 'none', outline: 'none',
+              fontSize: 11, color: 'var(--text-primary)', caretColor: 'var(--accent)',
+            }}
+          />
+        </div>
+
+        {/* Exported toggle */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', userSelect: 'none' }}>
+          <div
+            onClick={() => setExportedOnly(v => !v)}
+            style={{
+              width: 28, height: 15, borderRadius: 9999, position: 'relative', flexShrink: 0,
+              background: exportedOnly ? 'var(--accent)' : 'var(--border-default)',
+              transition: 'background 150ms', cursor: 'pointer',
+            }}
+          >
+            <div style={{
+              position: 'absolute', top: 2, left: exportedOnly ? 15 : 2,
+              width: 11, height: 11, borderRadius: 9999,
+              background: '#fff', transition: 'left 150ms',
+            }} />
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Exported only</span>
+        </label>
+      </div>
+
+      {/* ── Parse errors ── */}
+      {inspection.parseErrors && inspection.parseErrors.length > 0 && (
+        <div style={{ margin: '8px 10px', padding: '8px 10px', borderRadius: 6, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+          <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-error)', marginBottom: 4 }}>Parse errors</p>
+          {inspection.parseErrors.map((e, i) => (
+            <p key={i} style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--color-error)', opacity: 0.8 }}>{e}</p>
+          ))}
+        </div>
+      )}
+
+      {/* ── Sections ── */}
+      <div style={{ flex: 1, overflowY: 'auto' }} className="inspector-scroll">
+        <Section title="Functions"  count={fns.length}>
+          {fns.map(fn => <FunctionRow key={fn.name + fn.lineStart} fn={fn} />)}
+        </Section>
+        <Section title="Types"      count={types.length}>
+          {types.map(t => <TypeRow key={t.name} type={t} />)}
+        </Section>
+        <Section title="Interfaces" count={ifaces.length}>
+          {ifaces.map(i => <InterfaceRow key={i.name} iface={i} />)}
+        </Section>
+        <Section title="Imports"    count={imports.length}>
+          <ImportsPanel imports={imports} />
+        </Section>
+        <Section title="Variables"  count={vars.length}>
+          {vars.map(v => <VarRow key={v.name} v={v} />)}
+        </Section>
+        <Section title="Constants"  count={consts.length}>
+          {consts.map(c => <VarRow key={c.name} v={c} isConst />)}
+        </Section>
+      </div>
     </div>
   )
 }
