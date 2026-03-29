@@ -54,6 +54,12 @@ interface ASTViewerStore {
   focusPop: () => void
   focusTo: (depth: number) => void
 
+  // Node editing
+  updateNode: (nodeId: string, patch: Partial<Pick<TreeNode, 'name' | 'value' | 'props' | 'type' | 'category'>>) => void
+  addChildNode: (parentId: string, child: TreeNode) => void
+  removeChildNode: (parentId: string, childId: string) => void
+  duplicateNode: (nodeId: string) => void
+
   selectNode: (id: string | null) => void
   clear: () => void
 }
@@ -236,9 +242,118 @@ export const useASTViewerStore = create<ASTViewerStore>((set, get) => ({
     set({ tabs: applyPatch(tabs, activeTabId, { focusStack: nextStack, expandedNodeIds: new Set() }), selectedNodeId: nextStack.at(-1) ?? null })
   },
 
+  updateNode: (nodeId, patch) => {
+    const { tabs, activeTabId } = get()
+    const tab = tabs.find(t => t.id === activeTabId)
+    if (!tab) return
+    const existing = tab.nodeMap.get(nodeId)
+    if (!existing) return
+    const updated: TreeNode = {
+      ...existing,
+      ...patch,
+      props: { ...existing.props, ...patch.props, _edited: 'true' },
+    }
+    const nextMap = new Map(tab.nodeMap)
+    nextMap.set(nodeId, updated)
+    // Also patch the node inside the tree structure (mutate children reference)
+    const patchInTree = (n: TreeNode): TreeNode => {
+      if (n.id === nodeId) return updated
+      if (!n.children?.length) return n
+      const newChildren = n.children.map(patchInTree)
+      // Only create a new node object if something actually changed
+      const changed = newChildren.some((c, i) => c !== n.children![i])
+      return changed ? { ...n, children: newChildren } : n
+    }
+    const nextTree = patchInTree(tab.tree)
+    set({ tabs: applyPatch(tabs, activeTabId, { nodeMap: nextMap, tree: nextTree }) })
+  },
+
+  addChildNode: (parentId, child) => {
+    const { tabs, activeTabId } = get()
+    const tab = tabs.find(t => t.id === activeTabId)
+    if (!tab) return
+    const parent = tab.nodeMap.get(parentId)
+    if (!parent) return
+    // Register child (and its subtree) in nodeMap
+    const nextMap = new Map(tab.nodeMap)
+    const registerAll = (n: TreeNode) => {
+      nextMap.set(n.id, n)
+      n.children?.forEach(registerAll)
+    }
+    registerAll(child)
+    // Attach child to parent
+    const updatedParent: TreeNode = { ...parent, children: [...(parent.children ?? []), child] }
+    nextMap.set(parentId, updatedParent)
+    // Patch tree
+    const patchInTree = (n: TreeNode): TreeNode => {
+      if (n.id === parentId) return updatedParent
+      if (!n.children?.length) return n
+      const newChildren = n.children.map(patchInTree)
+      const changed = newChildren.some((c, i) => c !== n.children![i])
+      return changed ? { ...n, children: newChildren } : n
+    }
+    const nextTree = patchInTree(tab.tree)
+    set({ tabs: applyPatch(tabs, activeTabId, { nodeMap: nextMap, tree: nextTree }) })
+  },
+
+  removeChildNode: (parentId, childId) => {
+    const { tabs, activeTabId, selectedNodeId } = get()
+    const tab = tabs.find(t => t.id === activeTabId)
+    if (!tab) return
+    const parent = tab.nodeMap.get(parentId)
+    if (!parent) return
+    const nextMap = new Map(tab.nodeMap)
+    // Remove child and all its descendants from nodeMap
+    const removeAll = (n: TreeNode) => {
+      nextMap.delete(n.id)
+      n.children?.forEach(removeAll)
+    }
+    const childNode = tab.nodeMap.get(childId)
+    if (childNode) removeAll(childNode)
+    // Detach from parent
+    const updatedParent: TreeNode = { ...parent, children: parent.children?.filter(c => c.id !== childId) ?? [] }
+    nextMap.set(parentId, updatedParent)
+    // Patch tree
+    const patchInTree = (n: TreeNode): TreeNode => {
+      if (n.id === parentId) return updatedParent
+      if (!n.children?.length) return n
+      const newChildren = n.children.map(patchInTree)
+      const changed = newChildren.some((c, i) => c !== n.children![i])
+      return changed ? { ...n, children: newChildren } : n
+    }
+    const nextTree = patchInTree(tab.tree)
+    set({
+      tabs: applyPatch(tabs, activeTabId, { nodeMap: nextMap, tree: nextTree }),
+      selectedNodeId: selectedNodeId === childId ? null : selectedNodeId,
+    })
+  },
+
+  duplicateNode: (nodeId) => {
+    const { tabs, activeTabId } = get()
+    const tab = tabs.find(t => t.id === activeTabId)
+    if (!tab) return
+    const node = tab.nodeMap.get(nodeId)
+    if (!node) return
+    const cloned = deepCloneWithNewIds(node)
+    const nextC = new Map(tab.customNodes)
+    nextC.set(cloned.id, { node: cloned, position: { x: 80 + Math.random() * 160, y: 80 + Math.random() * 160 } })
+    const nextMap = new Map(tab.nodeMap)
+    const registerAll = (n: TreeNode) => { nextMap.set(n.id, n); n.children?.forEach(registerAll) }
+    registerAll(cloned)
+    set({ tabs: applyPatch(tabs, activeTabId, { customNodes: nextC, nodeMap: nextMap }) })
+  },
+
   selectNode: (id) => set({ selectedNodeId: id }),
   clear: () => set({ tabs: [], activeTabId: null, selectedNodeId: null }),
 }))
+
+function deepCloneWithNewIds(node: TreeNode): TreeNode {
+  return {
+    ...node,
+    id: crypto.randomUUID(),
+    children: node.children?.map(deepCloneWithNewIds),
+  }
+}
 
 /** Selector hook — returns the active tab or null */
 export const useActiveTab = () =>

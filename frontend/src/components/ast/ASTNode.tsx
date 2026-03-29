@@ -51,9 +51,11 @@ function ASTNodeComponent({ data, selected }: NodeProps) {
     )
   }
 
+  const isEdited = node.props?._edited === 'true'
+
   return (
     <div
-      className="overflow-hidden shadow-lg transition-all duration-150 select-none cursor-pointer"
+      className="relative overflow-hidden shadow-lg transition-all duration-150 select-none cursor-pointer"
       style={{
         width: 200,
         background: selected ? style.bg : 'hsl(222,47%,9%)',
@@ -66,6 +68,10 @@ function ASTNodeComponent({ data, selected }: NodeProps) {
     >
       {/* Top color bar */}
       <div className="h-0.5 w-full" style={{ background: style.border }} />
+      {/* Edited indicator */}
+      {isEdited && (
+        <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_4px_rgba(251,191,36,0.8)]" title="Node has been edited" />
+      )}
 
       <div className="px-3 py-2.5">
         {/* Category row */}
