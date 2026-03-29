@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { ChevronDown, ChevronRight, Minus } from 'lucide-react'
 import type { ASTFlowNodeData } from '@/lib/astToGraph'
+import { useASTViewerStore } from '@/store/astViewerStore'
 
 export const CATEGORY_COLORS: Record<string, { border: string; label: string; dot: string; bg: string }> = {
   file:       { border: '#6366f1', label: 'text-indigo-300',  dot: 'bg-indigo-400',  bg: '#1e1b4b22' },
@@ -17,18 +18,51 @@ export const CATEGORY_COLORS: Record<string, { border: string; label: string; do
   other:      { border: '#6b7280', label: 'text-gray-400',    dot: 'bg-gray-500',    bg: '#1f212622' },
 }
 
-function ASTNodeComponent({ data, selected }: NodeProps) {
+function ASTNodeComponent({ id, data, selected }: NodeProps) {
+  const toggleExpand = useASTViewerStore(s => s.toggleExpand)
   const d = data as ASTFlowNodeData
-  const { node, isExpanded, hasChildren, childCount, isRoot } = d
+  const { node, isExpanded, hasChildren, childCount, isRoot, compact } = d
   const style = CATEGORY_COLORS[node.category] ?? CATEGORY_COLORS.other
+
+  // Compact mode: single-line strip for deep/non-selected nodes
+  if (compact && !selected) {
+    return (
+      <div
+        className="overflow-hidden select-none cursor-pointer transition-all duration-150"
+        style={{
+          width: 180,
+          background: 'hsl(222,47%,9%)',
+          border: `1px solid hsl(216,34%,18%)`,
+          borderLeft: `3px solid ${style.border}`,
+        }}
+      >
+        <div className="flex items-center gap-1.5 px-2 py-1.5">
+          <span className={`w-1.5 h-1.5 shrink-0 ${style.dot}`} />
+          <span className="text-[10px] font-mono truncate" style={{ color: style.border }}>
+            {node.name || node.value || node.type}
+          </span>
+          {hasChildren && (
+            <span className="ml-auto text-[9px] text-muted-foreground/30 shrink-0">{childCount}</span>
+          )}
+        </div>
+        <Handle type="target" position={Position.Top}
+          className="!w-1 !h-1 !bg-transparent !border-0 !min-w-0" />
+        <Handle type="source" position={Position.Bottom}
+          className="!w-1 !h-1 !bg-transparent !border-0 !min-w-0" />
+      </div>
+    )
+  }
+
+  const isEdited = node.props?._edited === 'true'
 
   return (
     <div
-      className="rounded-xl overflow-hidden shadow-lg transition-all duration-150 select-none cursor-pointer"
+      className="relative overflow-hidden shadow-lg transition-all duration-150 select-none cursor-pointer"
       style={{
         width: 200,
         background: selected ? style.bg : 'hsl(222,47%,9%)',
         border: `1.5px solid ${selected ? style.border : 'hsl(216,34%,20%)'}`,
+        borderLeft: `3px solid ${style.border}`,
         boxShadow: selected
           ? `0 0 0 2px ${style.border}55, 0 8px 24px rgba(0,0,0,0.5)`
           : '0 2px 8px rgba(0,0,0,0.3)',
@@ -36,11 +70,15 @@ function ASTNodeComponent({ data, selected }: NodeProps) {
     >
       {/* Top color bar */}
       <div className="h-0.5 w-full" style={{ background: style.border }} />
+      {/* Edited indicator */}
+      {isEdited && (
+        <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_4px_rgba(251,191,36,0.8)]" title="Node has been edited" />
+      )}
 
       <div className="px-3 py-2.5">
         {/* Category row */}
         <div className="flex items-center gap-1.5 mb-1">
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot}`} />
+          <span className={`w-1.5 h-1.5 shrink-0 ${style.dot}`} />
           <span className={`text-[10px] font-bold uppercase tracking-widest leading-none ${style.label}`}>
             {node.category}
           </span>
@@ -51,27 +89,28 @@ function ASTNodeComponent({ data, selected }: NodeProps) {
           )}
         </div>
 
-        {/* Primary label — name/value if available, else type */}
+        {/* Primary label */}
         <p className="text-xs font-semibold font-mono truncate leading-tight" style={{ color: style.border }}>
           {node.name || node.value || node.type}
         </p>
 
-        {/* Secondary — AST type, only when there's a name above */}
+        {/* Secondary — AST type */}
         {(node.name || node.value) && (
           <p className="text-[10px] text-muted-foreground/50 font-mono truncate mt-0.5">
             {node.type}
           </p>
         )}
 
-        {/* Expand indicator */}
+        {/* Expand indicator — click to toggle inline children */}
         {hasChildren && !isRoot && (
           <div
-            className="flex items-center gap-1 mt-1.5 text-[10px] font-medium"
+            onClick={(e) => { e.stopPropagation(); toggleExpand(id) }}
+            className="flex items-center gap-1 mt-1.5 text-[10px] font-medium cursor-pointer hover:opacity-80"
             style={{ color: isExpanded ? style.border : 'hsl(215,20%,50%)' }}
           >
             {isExpanded
               ? <><ChevronDown size={10} /><span>{childCount} children</span></>
-              : <><ChevronRight size={10} /><span>{childCount} children — click to expand</span></>
+              : <><ChevronRight size={10} /><span>{childCount} — expand</span></>
             }
           </div>
         )}
