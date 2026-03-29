@@ -1,65 +1,98 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, FileCode, Layers } from 'lucide-react'
-import { useASTViewerStore } from '@/store/astViewerStore'
-import type { FunctionInfo, TypeInfo, InterfaceInfo, VarInfo, ImportInfo } from '@/lib/api'
+import { ChevronDown, ChevronRight, FileCode, Layers, Trash2 } from 'lucide-react'
+import { useASTViewerStore, useActiveTab, type CustomNodeEntry } from '@/store/astViewerStore'
+import type { TreeNode, FunctionInfo, TypeInfo, InterfaceInfo, VarInfo, ImportInfo } from '@/lib/api'
 import { CATEGORY_COLORS } from './ASTNode'
 
 type Tab = 'node' | 'file'
 
-export default function ASTSidebar() {
-  const { selectedNodeId, nodeMap, inspection, sourceCode } = useASTViewerStore()
-  const selectedNode = selectedNodeId ? nodeMap.get(selectedNodeId) : null
+const EMPTY_NODE_MAP = new Map<string, TreeNode>()
+const EMPTY_CUSTOM_MAP = new Map<string, CustomNodeEntry>()
 
-  // Auto-switch to node tab when something is selected
-  const [tab, setTab] = useState<Tab>('file')
-  const activeTab = selectedNode ? tab : 'file'
+export default function ASTSidebar() {
+  const activeTab = useActiveTab()
+  const { selectedNodeId, removeCustomNode, hideNode } = useASTViewerStore()
+
+  const nodeMap = activeTab?.nodeMap ?? EMPTY_NODE_MAP
+  const inspection = activeTab?.inspection ?? null
+  const sourceCode = activeTab?.sourceCode ?? ''
+  const customNodes = activeTab?.customNodes ?? EMPTY_CUSTOM_MAP
+
+  const selectedNode = selectedNodeId ? nodeMap.get(selectedNodeId) : null
+  const isCustomNode = selectedNodeId ? customNodes.has(selectedNodeId) : false
+
+  // 'pane' tracks which sidebar panel tab is selected
+  const [pane, setPane] = useState<Tab>('file')
+  const activePane = selectedNode ? pane : 'file'
+
+  function deleteSelected() {
+    if (!selectedNodeId) return
+    if (isCustomNode) removeCustomNode(selectedNodeId)
+    else hideNode(selectedNodeId)
+  }
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Tab bar */}
       <div className="flex border-b border-border shrink-0">
         <TabBtn
-          active={activeTab === 'node'}
+          active={activePane === 'node'}
           disabled={!selectedNode}
           icon={<Layers size={12} />}
           label="Node"
-          onClick={() => setTab('node')}
+          onClick={() => setPane('node')}
         />
         <TabBtn
-          active={activeTab === 'file'}
+          active={activePane === 'file'}
           icon={<FileCode size={12} />}
           label="File"
-          onClick={() => setTab('file')}
+          onClick={() => setPane('file')}
         />
+        {selectedNode && (
+          <button
+            onClick={deleteSelected}
+            title={isCustomNode ? 'Delete node' : 'Hide node (Del)'}
+            className="px-2.5 border-l border-border text-muted-foreground/50 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto inspector-scroll">
-        {activeTab === 'node' && selectedNode ? (
+        {activePane === 'node' && selectedNode ? (
           <div className="p-3 space-y-3">
             {/* Identity card */}
             <div
-              className="rounded-xl p-3 border"
+              className="p-3 border"
               style={{
                 background: `${CATEGORY_COLORS[selectedNode.category]?.border ?? '#6b7280'}11`,
                 borderColor: `${CATEGORY_COLORS[selectedNode.category]?.border ?? '#6b7280'}44`,
               }}
             >
-              <p
-                className="text-[10px] font-bold uppercase tracking-widest mb-0.5"
-                style={{ color: CATEGORY_COLORS[selectedNode.category]?.border ?? '#6b7280' }}
-              >
-                {selectedNode.category}
-              </p>
-              <p className="text-sm font-bold font-mono text-foreground">{selectedNode.type}</p>
-              {(selectedNode.name || selectedNode.value) && (
-                <p
-                  className="text-xs font-mono mt-0.5"
-                  style={{ color: CATEGORY_COLORS[selectedNode.category]?.border ?? '#6b7280' }}
-                >
-                  {selectedNode.name || selectedNode.value}
-                </p>
-              )}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p
+                    className="text-[10px] font-bold uppercase tracking-widest mb-0.5"
+                    style={{ color: CATEGORY_COLORS[selectedNode.category]?.border ?? '#6b7280' }}
+                  >
+                    {selectedNode.category}
+                    {isCustomNode && (
+                      <span className="ml-1.5 text-[9px] text-muted-foreground/40 normal-case tracking-normal">palette</span>
+                    )}
+                  </p>
+                  <p className="text-sm font-bold font-mono text-foreground">{selectedNode.type}</p>
+                  {(selectedNode.name || selectedNode.value) && (
+                    <p
+                      className="text-xs font-mono mt-0.5"
+                      style={{ color: CATEGORY_COLORS[selectedNode.category]?.border ?? '#6b7280' }}
+                    >
+                      {selectedNode.name || selectedNode.value}
+                    </p>
+                  )}
+                </div>
+              </div>
               <p className="text-[10px] font-mono text-muted-foreground/50 mt-1.5">
                 line {selectedNode.line ?? '?'} – {selectedNode.endLine ?? '?'}
                 &nbsp;·&nbsp; col {selectedNode.col ?? '?'}

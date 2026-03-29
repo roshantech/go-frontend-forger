@@ -19,16 +19,46 @@ export const CATEGORY_COLORS: Record<string, { border: string; label: string; do
 
 function ASTNodeComponent({ data, selected }: NodeProps) {
   const d = data as ASTFlowNodeData
-  const { node, isExpanded, hasChildren, childCount, isRoot } = d
+  const { node, isExpanded, hasChildren, childCount, isRoot, compact } = d
   const style = CATEGORY_COLORS[node.category] ?? CATEGORY_COLORS.other
+
+  // Compact mode: single-line strip for deep/non-selected nodes
+  if (compact && !selected) {
+    return (
+      <div
+        className="overflow-hidden select-none cursor-pointer transition-all duration-150"
+        style={{
+          width: 180,
+          background: 'hsl(222,47%,9%)',
+          border: `1px solid hsl(216,34%,18%)`,
+          borderLeft: `3px solid ${style.border}`,
+        }}
+      >
+        <div className="flex items-center gap-1.5 px-2 py-1.5">
+          <span className={`w-1.5 h-1.5 shrink-0 ${style.dot}`} />
+          <span className="text-[10px] font-mono truncate" style={{ color: style.border }}>
+            {node.name || node.value || node.type}
+          </span>
+          {hasChildren && (
+            <span className="ml-auto text-[9px] text-muted-foreground/30 shrink-0">{childCount}</span>
+          )}
+        </div>
+        <Handle type="target" position={Position.Top}
+          className="!w-1 !h-1 !bg-transparent !border-0 !min-w-0" />
+        <Handle type="source" position={Position.Bottom}
+          className="!w-1 !h-1 !bg-transparent !border-0 !min-w-0" />
+      </div>
+    )
+  }
 
   return (
     <div
-      className="rounded-xl overflow-hidden shadow-lg transition-all duration-150 select-none cursor-pointer"
+      className="overflow-hidden shadow-lg transition-all duration-150 select-none cursor-pointer"
       style={{
         width: 200,
         background: selected ? style.bg : 'hsl(222,47%,9%)',
         border: `1.5px solid ${selected ? style.border : 'hsl(216,34%,20%)'}`,
+        borderLeft: `3px solid ${style.border}`,
         boxShadow: selected
           ? `0 0 0 2px ${style.border}55, 0 8px 24px rgba(0,0,0,0.5)`
           : '0 2px 8px rgba(0,0,0,0.3)',
@@ -40,7 +70,7 @@ function ASTNodeComponent({ data, selected }: NodeProps) {
       <div className="px-3 py-2.5">
         {/* Category row */}
         <div className="flex items-center gap-1.5 mb-1">
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot}`} />
+          <span className={`w-1.5 h-1.5 shrink-0 ${style.dot}`} />
           <span className={`text-[10px] font-bold uppercase tracking-widest leading-none ${style.label}`}>
             {node.category}
           </span>
@@ -51,12 +81,12 @@ function ASTNodeComponent({ data, selected }: NodeProps) {
           )}
         </div>
 
-        {/* Primary label — name/value if available, else type */}
+        {/* Primary label */}
         <p className="text-xs font-semibold font-mono truncate leading-tight" style={{ color: style.border }}>
           {node.name || node.value || node.type}
         </p>
 
-        {/* Secondary — AST type, only when there's a name above */}
+        {/* Secondary — AST type */}
         {(node.name || node.value) && (
           <p className="text-[10px] text-muted-foreground/50 font-mono truncate mt-0.5">
             {node.type}
@@ -71,7 +101,7 @@ function ASTNodeComponent({ data, selected }: NodeProps) {
           >
             {isExpanded
               ? <><ChevronDown size={10} /><span>{childCount} children</span></>
-              : <><ChevronRight size={10} /><span>{childCount} children — click to expand</span></>
+              : <><ChevronRight size={10} /><span>{childCount} — expand</span></>
             }
           </div>
         )}

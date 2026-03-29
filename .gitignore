@@ -27,3 +27,4 @@ Thumbs.db
 
 # Claude memory
 .claude/
+node_modules
