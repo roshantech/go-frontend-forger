@@ -2,62 +2,69 @@ import { useRef, useCallback, useEffect, useState, type DragEvent } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { useMutation } from '@tanstack/react-query'
 import { astApi } from '@/lib/api'
-import { useASTViewerStore } from '@/store/astViewerStore'
+import { useASTViewerStore, useActiveTab } from '@/store/astViewerStore'
 import ASTFlowCanvas from '@/components/ast/ASTFlowCanvas'
 import ASTSidebar from '@/components/ast/ASTSidebar'
-import { Upload, Code2, GitBranch, X, RefreshCw } from 'lucide-react'
-import toast from 'react-hot-toast'
+import NodePalette from '@/components/ast/NodePalette'
 import { CATEGORY_COLORS } from '@/components/ast/ASTNode'
+import {
+  Upload, Code2, GitBranch, X, RefreshCw,
+  ChevronDown, ChevronUp, Layers, ChevronRight,
+  ArrowLeft, Home,
+} from 'lucide-react'
+import toast from 'react-hot-toast'
 
 const SIDEBAR_MIN = 200
 const SIDEBAR_MAX = 640
 const SIDEBAR_DEFAULT = 300
+const PALETTE_WIDTH = 220
 
 export default function ASTPage() {
-  const { setData, clear, tree, viewMode, setViewMode, sourceCode, fileName } =
-    useASTViewerStore()
-  const fileRef = useRef<HTMLInputElement>(null)
+  const activeTab = useActiveTab()
+  const {
+    tabs, activeTabId,
+    openFile, updateActiveTab, closeTab, switchTab,
+    setViewMode, setViewDensity, setMaxDepth,
+    focusPop, focusTo,
+  } = useASTViewerStore()
 
-  // ── Resizable sidebar ────────────────────────────────────────────────────
+  const fileRef = useRef<HTMLInputElement>(null)
+  const viewMode = activeTab?.viewMode ?? 'flow'
+  const viewDensity = activeTab?.viewDensity ?? 'summary'
+  const maxDepth = activeTab?.maxDepth ?? 2
+
+  // ── Resizable right sidebar ────────────────────────────────────────────────
   const [sidebarW, setSidebarW] = useState(SIDEBAR_DEFAULT)
   const resizing = useRef(false)
-  const resizeStartX = useRef(0)
-  const resizeStartW = useRef(0)
+  const resizeX = useRef(0)
+  const resizeW = useRef(0)
 
   useEffect(() => {
-    function onMove(e: MouseEvent) {
+    const onMove = (e: MouseEvent) => {
       if (!resizing.current) return
-      const delta = resizeStartX.current - e.clientX
-      setSidebarW(Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, resizeStartW.current + delta)))
+      setSidebarW(Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, resizeW.current + resizeX.current - e.clientX)))
     }
-    function onUp() { resizing.current = false; document.body.style.cursor = '' }
+    const onUp = () => { resizing.current = false; document.body.style.cursor = '' }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
   }, [])
 
-  function startResize(e: React.MouseEvent) {
-    resizing.current = true
-    resizeStartX.current = e.clientX
-    resizeStartW.current = sidebarW
-    document.body.style.cursor = 'col-resize'
-    e.preventDefault()
-  }
-
-  // ── Live code editing ────────────────────────────────────────────────────
-  const [editSource, setEditSource] = useState(sourceCode)
+  // ── Live code editing ──────────────────────────────────────────────────────
+  const [editSource, setEditSource] = useState(activeTab?.sourceCode ?? '')
   const [isParsing, setIsParsing] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
 
-  // Sync textarea when a new file is loaded
-  useEffect(() => { setEditSource(sourceCode) }, [sourceCode])
+  useEffect(() => { setEditSource(activeTab?.sourceCode ?? '') }, [activeTabId, activeTab?.sourceCode])
 
   const { mutate: reparse } = useMutation({
-    mutationFn: (src: string) =>
-      Promise.all([astApi.treeRaw(fileName || 'edit.go', src), astApi.inspectRaw(fileName || 'edit.go', src)]),
+    mutationFn: (src: string) => {
+      const name = activeTab?.fileName ?? 'edit.go'
+      return Promise.all([astApi.treeRaw(name, src), astApi.inspectRaw(name, src)])
+    },
     onMutate: () => setIsParsing(true),
     onSuccess: ([treeRes, inspectRes]) => {
-      setData(treeRes.data, inspectRes.data, editSource, fileName || 'edit.go')
+      updateActiveTab(treeRes.data, inspectRes.data, editSource)
       setIsParsing(false)
     },
     onError: () => setIsParsing(false),
@@ -70,18 +77,18 @@ export default function ASTPage() {
     debounceRef.current = setTimeout(() => reparse(val), 700)
   }
 
-  // ── File upload ──────────────────────────────────────────────────────────
+  // ── File upload ────────────────────────────────────────────────────────────
   const { mutate: upload, isPending: uploading } = useMutation({
     mutationFn: async ({ file, content, name }: { file?: File; content?: string; name: string }) => {
       if (file) {
-        const [treeRes, inspectRes] = await Promise.all([astApi.treeFile(file), astApi.inspectFile(file)])
-        return { tree: treeRes.data, inspection: inspectRes.data, source: content ?? '', name }
+        const [treeRes, inspRes] = await Promise.all([astApi.treeFile(file), astApi.inspectFile(file)])
+        return { tree: treeRes.data, inspection: inspRes.data, source: content ?? '', name }
       }
-      const [treeRes, inspectRes] = await Promise.all([astApi.treeRaw(name, content!), astApi.inspectRaw(name, content!)])
-      return { tree: treeRes.data, inspection: inspectRes.data, source: content!, name }
+      const [treeRes, inspRes] = await Promise.all([astApi.treeRaw(name, content!), astApi.inspectRaw(name, content!)])
+      return { tree: treeRes.data, inspection: inspRes.data, source: content!, name }
     },
     onSuccess: ({ tree, inspection, source, name }) => {
-      setData(tree, inspection, source, name)
+      openFile(tree, inspection, source, name)
       toast.success(`Parsed ${name}`)
     },
     onError: (err: unknown) => {
@@ -92,138 +99,263 @@ export default function ASTPage() {
   const handleFile = useCallback((file: File) => {
     if (!file.name.endsWith('.go')) { toast.error('Only .go files supported'); return }
     const reader = new FileReader()
-    reader.onload = (e) => upload({ file, content: e.target?.result as string, name: file.name })
+    reader.onload = e => upload({ file, content: e.target?.result as string, name: file.name })
     reader.readAsText(file)
   }, [upload])
 
-  const onDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
+  const onFileDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
     if (file) handleFile(file)
   }, [handleFile])
 
-  const isLoading = uploading
+  // ── Breadcrumb data ────────────────────────────────────────────────────────
+  const breadcrumb = activeTab
+    ? [activeTab.tree.id, ...activeTab.focusStack].map(id => activeTab.nodeMap.get(id)).filter(Boolean)
+    : []
+  // The last breadcrumb item is the current focus root
+  const focusedNode = breadcrumb.at(-1) ?? null
+
+  const hasFocus = (activeTab?.focusStack.length ?? 0) > 0
 
   return (
     <div className="flex flex-col h-full">
-      {/* ── Top bar ── */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-card shrink-0 min-w-0">
-        <GitBranch size={14} className="text-primary shrink-0" />
-        <span className="text-sm font-semibold text-foreground truncate max-w-[160px]">
-          {fileName || 'AST Visualizer'}
-        </span>
+      {/* ── Tabs bar ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center border-b border-border bg-card shrink-0 min-w-0 overflow-x-auto">
+        <div className="flex items-center flex-1 min-w-0">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => switchTab(tab.id)}
+              className={`group flex items-center gap-1.5 px-3 py-2 text-xs font-medium shrink-0 border-r border-border transition-colors ${
+                tab.id === activeTabId
+                  ? 'bg-background text-foreground border-b-2 border-b-primary'
+                  : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+              }`}
+            >
+              <GitBranch size={11} className={tab.id === activeTabId ? 'text-primary' : 'text-muted-foreground/50'} />
+              <span className="max-w-[120px] truncate">{tab.fileName}</span>
+              <span
+                onClick={e => { e.stopPropagation(); closeTab(tab.id) }}
+                className="w-3.5 h-3.5 flex items-center justify-center opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity ml-0.5"
+              >
+                <X size={10} />
+              </span>
+            </button>
+          ))}
 
-        {tree && (
-          <>
-            <span className="text-muted-foreground/30">·</span>
-            <span className="text-xs text-muted-foreground shrink-0">
-              {useASTViewerStore.getState().nodeMap.size} nodes
-            </span>
+          {/* + open new file */}
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="px-3 py-2 text-xs text-muted-foreground/50 hover:text-foreground hover:bg-accent/50 transition-colors shrink-0"
+            title="Open new .go file"
+          >
+            + Open
+          </button>
+        </div>
 
+        {/* Right-side controls (only when a file is open) */}
+        {activeTab && (
+          <div className="flex items-center gap-2 px-3 shrink-0">
             {isParsing && (
               <span className="flex items-center gap-1 text-[10px] text-primary/70">
-                <RefreshCw size={10} className="animate-spin" /> reparsing…
+                <RefreshCw size={9} className="animate-spin" /> reparsing
               </span>
             )}
 
-            <div className="flex-1 min-w-0" />
-
-            {/* Category legend */}
-            <div className="hidden xl:flex items-center gap-1">
-              {(['function', 'control', 'statement', 'expression', 'type', 'import'] as const).map((cat) => (
-                <span key={cat} className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0"
-                  style={{ background: `${CATEGORY_COLORS[cat].border}22`, color: CATEGORY_COLORS[cat].border }}>
-                  {cat}
+            {/* Depth control (flow mode only) */}
+            {viewMode === 'flow' && (
+              <div className="flex items-center gap-1">
+                <Layers size={10} className="text-muted-foreground/40" />
+                <span className="text-[10px] text-muted-foreground/40 font-mono">depth</span>
+                <button onClick={() => setMaxDepth(maxDepth > 1 ? maxDepth - 1 : 0)}
+                  className="w-4 h-4 flex items-center justify-center border border-border text-muted-foreground hover:bg-accent transition-colors">
+                  <ChevronDown size={9} />
+                </button>
+                <span className="text-[10px] font-mono text-foreground/80 w-4 text-center">
+                  {maxDepth === 0 ? '∞' : maxDepth}
                 </span>
-              ))}
-            </div>
+                <button onClick={() => setMaxDepth(maxDepth === 0 ? 1 : maxDepth + 1)}
+                  className="w-4 h-4 flex items-center justify-center border border-border text-muted-foreground hover:bg-accent transition-colors">
+                  <ChevronUp size={9} />
+                </button>
+                <button onClick={() => setMaxDepth(0)}
+                  className={`px-1 h-4 text-[9px] font-bold uppercase tracking-wider border transition-colors ${
+                    maxDepth === 0 ? 'border-primary/60 text-primary bg-primary/10' : 'border-border text-muted-foreground/40 hover:border-primary/40'
+                  }`}>∞</button>
+              </div>
+            )}
 
-            <div className="flex-1 min-w-0" />
+            <div className="w-px h-3 bg-border" />
+
+            {/* Density toggle (flow mode only) */}
+            {viewMode === 'flow' && (
+              <div className="flex border border-border text-[10px]">
+                <button
+                  onClick={() => setViewDensity('summary')}
+                  title="Summary: hide expression/literal detail nodes — major blocks only"
+                  className={`px-2 py-1 transition-colors ${viewDensity === 'summary' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
+                >
+                  Summary
+                </button>
+                <button
+                  onClick={() => setViewDensity('full')}
+                  title="Full: show all AST nodes"
+                  className={`px-2 py-1 transition-colors ${viewDensity === 'full' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
+                >
+                  Full
+                </button>
+              </div>
+            )}
+
+            <div className="w-px h-3 bg-border" />
 
             {/* View toggle */}
-            <div className="flex rounded-lg overflow-hidden border border-border text-xs shrink-0">
+            <div className="flex border border-border text-[10px]">
               <button onClick={() => setViewMode('flow')}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors ${
-                  viewMode === 'flow' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-accent'}`}>
-                <GitBranch size={12} /> Flow
+                className={`flex items-center gap-1 px-2 py-1 transition-colors ${viewMode === 'flow' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}>
+                <GitBranch size={10} /> Flow
               </button>
               <button onClick={() => setViewMode('code')}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors ${
-                  viewMode === 'code' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-accent'}`}>
-                <Code2 size={12} /> Code
+                className={`flex items-center gap-1 px-2 py-1 transition-colors ${viewMode === 'code' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}>
+                <Code2 size={10} /> Code
               </button>
             </div>
-
-            <button onClick={clear} title="Close file"
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent transition-colors shrink-0">
-              <X size={14} />
-            </button>
-          </>
+          </div>
         )}
-
-        {!tree && <div className="flex-1" />}
       </div>
 
-      {/* ── Main area ── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* ── Focus / breadcrumb bar (visible when drilled in) ─────────────── */}
+      {activeTab && hasFocus && (
+        <div className="flex items-center gap-0 border-b border-border bg-[hsl(222,47%,7%)] shrink-0 min-w-0">
+          {/* Back + Home */}
+          <button
+            onClick={focusPop}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/50 border-r border-border transition-colors shrink-0"
+          >
+            <ArrowLeft size={11} /> Back
+          </button>
+          <button
+            onClick={() => focusTo(0)}
+            className="flex items-center justify-center w-8 py-1.5 text-muted-foreground/50 hover:text-foreground hover:bg-accent/50 border-r border-border transition-colors shrink-0"
+            title="Go to file root"
+          >
+            <Home size={11} />
+          </button>
 
-        {/* Canvas / Code / Upload */}
-        <div className="flex-1 min-w-0 relative overflow-hidden">
-          {!tree ? (
-            <UploadZone
-              onPaste={(name, content) => upload({ content, name })}
-              isPending={isLoading}
-              onDrop={onDrop}
-              fileRef={fileRef}
-            />
-          ) : viewMode === 'flow' ? (
-            <ReactFlowProvider>
-              <ASTFlowCanvas />
-            </ReactFlowProvider>
-          ) : (
-            /* Live code editor */
-            <div className="h-full flex flex-col">
-              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-card/50 shrink-0">
-                <Code2 size={12} className="text-muted-foreground" />
-                <span className="text-[11px] text-muted-foreground font-mono">{fileName}</span>
-                <span className="ml-auto text-[10px] text-muted-foreground/50">
-                  edit code · AST updates automatically
+          {/* Breadcrumb path */}
+          <div className="flex items-center min-w-0 flex-1 overflow-x-auto px-2 gap-0.5">
+            {breadcrumb.map((node, i) => {
+              const isLast = i === breadcrumb.length - 1
+              const style = CATEGORY_COLORS[node!.category] ?? CATEGORY_COLORS.other
+              const label = node!.name || node!.value || node!.type
+              return (
+                <span key={node!.id} className="flex items-center gap-0.5 shrink-0">
+                  {i > 0 && <ChevronRight size={9} className="text-muted-foreground/30 shrink-0" />}
+                  <button
+                    onClick={() => !isLast && focusTo(i)}
+                    className={`flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono transition-colors ${
+                      isLast
+                        ? 'text-foreground font-semibold cursor-default'
+                        : 'text-muted-foreground/60 hover:text-foreground cursor-pointer'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 shrink-0`} style={{ background: style.border }} />
+                    <span className="truncate max-w-[80px]">{label}</span>
+                  </button>
                 </span>
-                {isParsing && (
-                  <span className="flex items-center gap-1 text-[10px] text-primary/70">
-                    <RefreshCw size={9} className="animate-spin" /> parsing
-                  </span>
-                )}
-              </div>
-              <textarea
-                value={editSource}
-                onChange={handleCodeChange}
-                spellCheck={false}
-                className="flex-1 w-full p-4 font-mono text-xs text-foreground/85 bg-background resize-none focus:outline-none leading-relaxed"
-                style={{ tabSize: 2 }}
-              />
+              )
+            })}
+          </div>
+
+          {/* Current focused node info (right side) */}
+          {focusedNode && (
+            <div className="flex items-center gap-2 px-3 py-1.5 border-l border-border shrink-0">
+              <span
+                className="text-[10px] font-bold uppercase tracking-wider"
+                style={{ color: CATEGORY_COLORS[focusedNode.category]?.border ?? '#6b7280' }}
+              >
+                {focusedNode.category}
+              </span>
+              <span className="text-[10px] font-mono text-foreground/70">{focusedNode.type}</span>
+              {(focusedNode.line != null) && (
+                <span className="text-[10px] font-mono text-muted-foreground/40">
+                  line {focusedNode.line}–{focusedNode.endLine ?? '?'}
+                </span>
+              )}
+              <span className="text-[10px] text-muted-foreground/30">
+                {focusedNode.children?.length ?? 0} children
+              </span>
             </div>
           )}
-
-          <input ref={fileRef} type="file" accept=".go" className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }} />
         </div>
+      )}
 
-        {/* ── Resize handle ── */}
-        <div
-          onMouseDown={startResize}
-          className="w-1 shrink-0 cursor-col-resize bg-border hover:bg-primary/50 transition-colors active:bg-primary"
-          title="Drag to resize"
-        />
+      {/* ── Body ─────────────────────────────────────────────────────────── */}
+      {tabs.length === 0 ? (
+        /* No files open — full-page upload zone */
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <UploadZone
+            onPaste={(name, content) => upload({ content, name })}
+            isPending={uploading}
+            onDrop={onFileDrop}
+            fileRef={fileRef}
+          />
+        </div>
+      ) : (
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* Left palette (flow mode only) */}
+          {viewMode === 'flow' && (
+            <aside className="shrink-0 overflow-hidden" style={{ width: PALETTE_WIDTH }}>
+              <NodePalette />
+            </aside>
+          )}
 
-        {/* ── Right sidebar (resizable) ── */}
-        <aside
-          className="shrink-0 border-l border-border bg-card overflow-hidden"
-          style={{ width: sidebarW }}
-        >
-          <ASTSidebar />
-        </aside>
-      </div>
+          {/* Canvas / Code editor */}
+          <div className="flex-1 min-w-0 relative overflow-hidden">
+            {viewMode === 'flow' ? (
+              <ReactFlowProvider>
+                <ASTFlowCanvas />
+              </ReactFlowProvider>
+            ) : (
+              <div className="h-full flex flex-col">
+                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-card/50 shrink-0">
+                  <Code2 size={11} className="text-muted-foreground" />
+                  <span className="text-[11px] text-muted-foreground font-mono">{activeTab?.fileName}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground/40">edit · AST auto-updates</span>
+                </div>
+                <textarea
+                  value={editSource}
+                  onChange={handleCodeChange}
+                  spellCheck={false}
+                  className="flex-1 w-full p-4 font-mono text-xs text-foreground/85 bg-background resize-none focus:outline-none leading-relaxed"
+                  style={{ tabSize: 2 }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Resize handle */}
+          <div
+            onMouseDown={e => {
+              resizing.current = true
+              resizeX.current = e.clientX
+              resizeW.current = sidebarW
+              document.body.style.cursor = 'col-resize'
+              e.preventDefault()
+            }}
+            className="w-1 shrink-0 cursor-col-resize bg-border hover:bg-primary/50 transition-colors active:bg-primary"
+          />
+
+          {/* Right sidebar */}
+          <aside className="shrink-0 border-l border-border bg-card overflow-hidden" style={{ width: sidebarW }}>
+            <ASTSidebar />
+          </aside>
+        </div>
+      )}
+
+      <input ref={fileRef} type="file" accept=".go" className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }} />
     </div>
   )
 }
@@ -242,25 +374,22 @@ function UploadZone({
     <div className="h-full flex items-center justify-center p-8">
       <div
         onDrop={onDrop}
-        onDragOver={(e) => e.preventDefault()}
+        onDragOver={e => e.preventDefault()}
         onClick={() => fileRef.current?.click()}
-        className="w-full max-w-md flex flex-col items-center gap-5 rounded-2xl border-2 border-dashed border-border hover:border-primary/60 hover:bg-accent/10 transition-colors cursor-pointer py-12 px-8 text-center"
+        className="w-full max-w-md flex flex-col items-center gap-5 border-2 border-dashed border-border hover:border-primary/60 hover:bg-accent/10 transition-colors cursor-pointer py-12 px-8 text-center"
       >
         {isPending
           ? <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          : <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
+          : <div className="w-14 h-14 bg-muted flex items-center justify-center">
               <Upload size={24} className="text-muted-foreground" />
             </div>
         }
         <div>
-          <p className="text-base font-semibold text-foreground">
-            {isPending ? 'Parsing…' : 'Drop a .go file'}
-          </p>
+          <p className="text-base font-semibold text-foreground">{isPending ? 'Parsing…' : 'Drop a .go file'}</p>
           <p className="text-sm text-muted-foreground mt-1">or click to browse</p>
         </div>
-
         {!isPending && (
-          <div className="w-full" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full" onClick={e => e.stopPropagation()}>
             <p className="text-xs text-muted-foreground/50 mb-2">or paste source:</p>
             <QuickPasteForm onSubmit={onPaste} />
           </div>
@@ -273,10 +402,9 @@ function UploadZone({
 function QuickPasteForm({ onSubmit }: { onSubmit: (name: string, content: string) => void }) {
   const nameRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
-
   return (
     <form
-      onSubmit={(e) => {
+      onSubmit={e => {
         e.preventDefault()
         const name = nameRef.current?.value.trim() || 'input.go'
         const content = contentRef.current?.value.trim() || ''
@@ -285,11 +413,11 @@ function QuickPasteForm({ onSubmit }: { onSubmit: (name: string, content: string
       className="space-y-2 text-left"
     >
       <input ref={nameRef} defaultValue="main.go"
-        className="w-full px-2.5 py-1.5 rounded-lg bg-muted border border-border text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/40" />
+        className="w-full px-2.5 py-1.5 bg-muted border border-border text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/40" />
       <textarea ref={contentRef} rows={4} placeholder={'package main\n\nfunc main() {\n}'}
-        className="w-full px-2.5 py-2 rounded-lg bg-muted border border-border text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none" />
+        className="w-full px-2.5 py-2 bg-muted border border-border text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none" />
       <button type="submit"
-        className="w-full py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors">
+        className="w-full py-1.5 bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors">
         Parse
       </button>
     </form>

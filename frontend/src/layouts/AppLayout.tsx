@@ -1,75 +1,177 @@
-import { Navigate, Outlet, Link, useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { authApi } from '@/lib/api'
-import { isAuthenticated, clearToken } from '@/lib/auth'
-import { LayoutDashboard, GitBranch, LogOut } from 'lucide-react'
-import toast from 'react-hot-toast'
+import { useRef, useState, useEffect } from 'react'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { isAuthenticated } from '@/lib/auth'
+import { Navbar } from '@/components/Navbar'
+import { Sidebar } from '@/components/Sidebar'
+import { RightPanel } from '@/components/RightPanel'
+import { PanelRightClose, PanelRightOpen } from 'lucide-react'
+
+const SIDEBAR_MIN = 160
+const SIDEBAR_MAX = 400
+const SIDEBAR_DEF = 220
+
+const PANEL_MIN = 260
+const PANEL_MAX = 600
+const PANEL_DEF = 380
 
 export default function AppLayout() {
-  if (!isAuthenticated()) {
-    return <Navigate to="/login" replace />
-  }
-
-  const { data: user } = useQuery({
-    queryKey: ['me'],
-    queryFn: () => authApi.me().then((r) => r.data),
-  })
-
   const location = useLocation()
 
-  function handleLogout() {
-    clearToken()
-    toast.success('Logged out')
-    window.location.href = '/login'
+  // ── Left sidebar resize ─────────────────────────────────────
+  const [sidebarW, setSidebarW] = useState(SIDEBAR_DEF)
+  const sbDragging  = useRef(false)
+  const sbStartX    = useRef(0)
+  const sbStartW    = useRef(SIDEBAR_DEF)
+
+  // ── Right panel resize + visibility ────────────────────────
+  const [panelW, setPanelW]   = useState(PANEL_DEF)
+  const [visible, setVisible] = useState(true)
+  const prevPanelW            = useRef(PANEL_DEF)
+  const rpDragging  = useRef(false)
+  const rpStartX    = useRef(0)
+  const rpStartW    = useRef(PANEL_DEF)
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      // Left sidebar — drag right to widen, left to narrow
+      if (sbDragging.current) {
+        const delta = e.clientX - sbStartX.current
+        setSidebarW(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, sbStartW.current + delta)))
+      }
+      // Right panel — drag left to widen, right to narrow
+      if (rpDragging.current) {
+        const delta = rpStartX.current - e.clientX
+        setPanelW(Math.min(PANEL_MAX, Math.max(PANEL_MIN, rpStartW.current + delta)))
+      }
+    }
+    function onUp() {
+      if (sbDragging.current || rpDragging.current) {
+        sbDragging.current            = false
+        rpDragging.current            = false
+        document.body.style.cursor    = ''
+        document.body.style.userSelect = ''
+      }
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup',   onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup',   onUp)
+    }
+  }, [])
+
+  // Auth guard — after all hooks
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace state={{ from: location }} />
   }
 
-  const navItems = [
-    { to: '/project', icon: <LayoutDashboard size={18} />, label: 'Workflow' },
-    { to: '/ast',     icon: <GitBranch size={18} />,       label: 'AST Visualizer' },
-  ]
+  function startSidebarDrag(e: React.MouseEvent) {
+    e.preventDefault()
+    sbDragging.current            = true
+    sbStartX.current              = e.clientX
+    sbStartW.current              = sidebarW
+    document.body.style.cursor    = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  function startPanelDrag(e: React.MouseEvent) {
+    e.preventDefault()
+    rpDragging.current            = true
+    rpStartX.current              = e.clientX
+    rpStartW.current              = panelW
+    document.body.style.cursor    = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  function togglePanel() {
+    if (visible) {
+      prevPanelW.current = panelW
+      setVisible(false)
+    } else {
+      setVisible(true)
+      setPanelW(prevPanelW.current)
+    }
+  }
+
+  const dragHandle = (onDown: (e: React.MouseEvent) => void) => (
+    <div
+      onMouseDown={onDown}
+      style={{
+        width: 4, flexShrink: 0, cursor: 'col-resize',
+        background: 'transparent',
+        transition: 'background 150ms',
+        zIndex: 10,
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--accent)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+    />
+  )
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      {/* Sidebar */}
-      <aside className="w-14 flex flex-col items-center py-4 gap-2 border-r border-border bg-card shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm mb-4">
-          F
-        </div>
-        {navItems.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            title={item.label}
-            className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors
-              ${location.pathname === item.to
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-              }`}
-          >
-            {item.icon}
-          </Link>
-        ))}
-        <div className="flex-1" />
-        <button
-          onClick={handleLogout}
-          title="Logout"
-          className="w-10 h-10 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-        >
-          <LogOut size={18} />
-        </button>
-        {user && (
-          <div
-            title={user.email}
-            className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-xs"
-          >
-            {user.email[0].toUpperCase()}
-          </div>
-        )}
-      </aside>
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      height: '100vh', width: '100vw',
+      overflow: 'hidden', background: 'var(--bg-base)',
+    }}>
+      <Navbar />
 
-      <main className="flex-1 overflow-hidden">
-        <Outlet />
-      </main>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+
+        {/* Left sidebar — resizable */}
+        <div style={{ width: sidebarW, flexShrink: 0, overflow: 'hidden' }}>
+          <Sidebar />
+        </div>
+
+        {/* Left drag handle */}
+        {dragHandle(startSidebarDrag)}
+
+        {/* Center canvas */}
+        <main style={{ flex: 1, overflow: 'hidden', minWidth: 0, position: 'relative' }}>
+          <Outlet />
+
+          {/* Toggle right panel button */}
+          <button
+            data-testid="toggle-right-panel"
+            onClick={togglePanel}
+            title={visible ? 'Hide panel' : 'Show panel'}
+            style={{
+              position: 'absolute', top: 10, right: 10, zIndex: 20,
+              width: 28, height: 28, borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-default)',
+              color: visible ? 'var(--accent)' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              boxShadow: 'var(--shadow-md)',
+              transition: 'color 150ms, background 150ms',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'var(--bg-raised)'
+              e.currentTarget.style.color      = 'var(--accent)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'var(--bg-surface)'
+              e.currentTarget.style.color      = visible ? 'var(--accent)' : 'var(--text-secondary)'
+            }}
+          >
+            {visible ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+          </button>
+        </main>
+
+        {/* Right drag handle */}
+        {visible && dragHandle(startPanelDrag)}
+
+        {/* Right panel */}
+        <div style={{
+          width: visible ? panelW : 0,
+          flexShrink: 0,
+          overflow: 'hidden',
+          transition: visible ? 'none' : 'width 200ms ease',
+        }}>
+          {visible && <RightPanel />}
+        </div>
+
+      </div>
     </div>
   )
 }

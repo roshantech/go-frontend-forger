@@ -13,6 +13,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import ProjectPage from './pages/ProjectPage'
 import ASTPage from './pages/ASTPage'
+import { ProcessingPage } from './pages/ProcessingPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +39,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/project" element={<ProjectPage />} />
             <Route path="/ast" element={<ASTPage />} />
           </Route>
+
+          {/* Processing — standalone, no app layout */}
+          <Route path="/processing" element={<ProcessingPage />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
